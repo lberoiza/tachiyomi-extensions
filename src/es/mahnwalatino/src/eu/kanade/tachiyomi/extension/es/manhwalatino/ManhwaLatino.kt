@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.extension.es.manhwalatino
 
 import android.net.Uri
 import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
@@ -12,41 +11,107 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.ParsedHttpSource
 import eu.kanade.tachiyomi.util.asJsoup
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 class ManhwaLatino : ParsedHttpSource() {
 
+    /**
+     * Name of the source.
+     */
     override val name = "Manhwa-Latino"
-    override val baseUrl = "https://manhwa-latino.com/"
-    override val lang = "es"
-    override val supportsLatest = true
 
+    /**
+     * Base url of the website without the trailing slash, like: http://mysite.com
+     */
+    override val baseUrl = "https://manhwa-latino.com/"
+
+    /**
+     * An ISO 639-1 compliant language code (two letters in lower case).
+     */
+    override val lang = "es"
+
+    /**
+     * Whether the source has support for latest updates.
+     */
+    override val supportsLatest = false
+
+    /**
+     * Returns the Jsoup selector that returns a list of [Element] corresponding to each manga.
+     */
     override fun popularMangaSelector() = "div.page-item-detail.manga"
+
+    /**
+     * Returns the Jsoup selector that returns a list of [Element] corresponding to each manga.
+     */
     override fun latestUpdatesSelector() = popularMangaSelector()
+
+    /**
+     * Returns the Jsoup selector that returns a list of [Element] corresponding to each manga.
+     */
     override fun searchMangaSelector() = "div.page-item-detail.manga"
+
+    /**
+     * Returns the Jsoup selector that returns a list of [Element] corresponding to each chapter.
+     */
     override fun chapterListSelector() = throw Exception("Not Used")
 
+    /**
+     * Returns the Jsoup selector that returns the <a> tag linking to the next page, or null if
+     * there's no next page.
+     */
     override fun popularMangaNextPageSelector() = "a.nextpostslink"
+
+    /**
+     * Returns the Jsoup selector that returns the <a> tag linking to the next page, or null if
+     * there's no next page.
+     */
     override fun latestUpdatesNextPageSelector() = "div[role=navigation] a.last"
+
+    /**
+     * Returns the Jsoup selector that returns the <a> tag linking to the next page, or null if
+     * there's no next page.
+     */
     override fun searchMangaNextPageSelector() = latestUpdatesNextPageSelector()
 
+    /**
+     * Returns the request for the popular manga given the page.
+     *
+     * @param page the page number to retrieve.
+     */
     override fun popularMangaRequest(page: Int) =
         GET("$baseUrl/page/$page/", headers)
 
+    /**
+     * Returns the request for latest manga given the page.
+     *
+     * @param page the page number to retrieve.
+     */
     override fun latestUpdatesRequest(page: Int) =
-//        GET("$baseUrl/reciente/doujin?p=$page", headers)
         GET("$baseUrl/page/$page/", headers)
 
+    /**
+     * Returns the request for the search manga given the page.
+     *
+     * @param page the page number to retrieve.
+     * @param query the search query.
+     * @param filters the list of filters to apply.
+     */
     override fun searchMangaRequest(page: Int, query: String, filters: FilterList): Request {
+        println("====searchMangaRequest====")
+        println("page: $page")
+        println("query: $query")
+        println("filters: $filters")
+        println("==== ================ ====")
+
         val uri = if (query.isNotBlank()) {
+            println("== QUERY NOT BLANK  ==")
             Uri.parse(baseUrl).buildUpon()
                 .appendQueryParameter("s", query)
+                .appendQueryParameter("post_type", "wp-manga")
         } else {
+            println("== QUERY BLANK  ==")
             val uri = Uri.parse("$baseUrl/?s=&post_type=wp-manga").buildUpon()
             // Append uri filters
             filters.forEach {
@@ -55,24 +120,49 @@ class ManhwaLatino : ParsedHttpSource() {
             }
             uri.appendQueryParameter("p", page.toString())
         }
+
+        println("============")
+        println("Uri: $uri")
+
         return GET(uri.toString(), headers)
     }
 
-    // override fun mangaDetailsRequest(manga: SManga) = GET(baseUrl + manga.url, headers)
-    // override fun pageListRequest(chapter: SChapter) = GET(baseUrl + chapter.url, headers)
+    /**
+     * Parses the response from the site and returns a [MangasPage] object.
+     *
+     * @param response the response from the site.
+     */
+    override fun searchMangaParse(response: Response): MangasPage {
+        println("== searchMangaParse ==")
+        val document = response.asJsoup()
+        val mangas = document.select("div.c-tabs-item__content").map { getSmanga(it) }
+        val hasNextPages = document.select("#navigation-ajax").hasText()
+        return MangasPage(mangas, hasNextPages)
+    }
 
-// //////////////////////////
+    private fun getSmanga(element: Element): SManga {
+        val manga = SManga.create()
+        manga.setUrlWithoutDomain(element.select("div.tab-summary .post-title a").attr("abs:href"))
+        manga.title = element.select("div.tab-summary .post-title a").text().trim()
+        manga.thumbnail_url = element.select("div.tab-thumb img").attr("abs:data-src")
+        return manga
+    }
 
+//    /**
+//     * Returns the request for the details of a manga. Override only if it's needed to change the
+//     * url, send different headers or request method like POST.
+//     *
+//     * @param manga the manga to be updated.
+//     */
+//    override fun mangaDetailsRequest(manga: SManga) = GET(baseUrl + manga.url, headers)
+
+    /**
+     * Returns the request for updating the chapter list. Override only if it's needed to override
+     * the url, send different headers or request method like POST.
+     *
+     * @param manga the manga to look for chapters.
+     */
     override fun chapterListRequest(manga: SManga): Request {
-        println("=== chapterListRequest ===")
-        try {
-            throw Exception()
-        } catch (ex: Exception) {
-            ex.stackTrace.forEach { l ->
-                println(l)
-            }
-        }
-        println("=== backtrace ===")
         println("=== chapterListRequest ===")
         println("manga.author: ${manga.author}")
         println("manga.artist: ${manga.artist}")
@@ -85,6 +175,11 @@ class ManhwaLatino : ParsedHttpSource() {
         return GET(baseUrl + manga.url, headers)
     }
 
+    /**
+     * Parses the response from the site and returns a [MangasPage] object.
+     *
+     * @param response the response from the site.
+     */
     override fun latestUpdatesParse(response: Response): MangasPage {
         println("latestUpdatesParse")
         val document = response.asJsoup()
@@ -97,9 +192,22 @@ class ManhwaLatino : ParsedHttpSource() {
         return MangasPage(mangas, hasNextPage)
     }
 
+    /**
+     * Returns a manga from the given [element]. Most sites only show the title and the url, it's
+     * totally fine to fill only those two values.
+     *
+     * @param element an element obtained from [popularMangaSelector].
+     */
     override fun popularMangaFromElement(element: Element) = mangaFromElement(element)
+
+    /**
+     * Returns a manga from the given [element]. Most sites only show the title and the url, it's
+     * totally fine to fill only those two values.
+     *
+     * @param element an element obtained from [latestUpdatesSelector].
+     */
     override fun latestUpdatesFromElement(element: Element): SManga {
-        println("latestUpdatesFromElement")
+        println("== latestUpdatesFromElement ==")
 
         val manga = SManga.create()
         manga.setUrlWithoutDomain(element.select("a").first().attr("abs:href"))
@@ -107,31 +215,38 @@ class ManhwaLatino : ParsedHttpSource() {
         return manga
     }
 
+    /**
+     * Returns a manga from the given [element]. Most sites only show the title and the url, it's
+     * totally fine to fill only those two values.
+     *
+     * @param element an element obtained from [searchMangaSelector].
+     */
     override fun searchMangaFromElement(element: Element) = mangaFromElement(element)
 
+    /**
+     * Returns a manga from the given [element]. Most sites only show the title and the url, it's
+     * totally fine to fill only those two values.
+     *
+     * @param element an element obtained from [searchMangaSelector].
+     */
     private fun mangaFromElement(element: Element): SManga {
         val manga = SManga.create()
         manga.setUrlWithoutDomain(element.select("a").first().attr("abs:href"))
         manga.title = element.select("h3").text().trim()
-
+        manga.thumbnail_url = element.select("div.item-thumb.c-image-hover img").attr("abs:data-src")
         println("=======")
         println("mangaFromElement")
-        println("--")
         println("Title: ${manga.title}")
-        println("Bild: " + element.select("div.item-thumb.c-image-hover img").attr("abs:data-src"))
-
-        // manga.thumbnail_url = "https:" + element.select("img").attr("src")
-        val urlAdress = element.select("div.item-thumb.c-image-hover img").attr("abs:data-src")
-        if (!urlAdress.contains("dflazy.jpg", true)) {
-            manga.thumbnail_url = urlAdress
-        }
-        println("--")
         println("thumbnail_url: ${manga.thumbnail_url}")
         println("=======")
-
         return manga
     }
 
+    /**
+     * Parses the response from the site and returns a list of chapters.
+     *
+     * @param response the response from the site.
+     */
     override fun chapterListParse(response: Response): List<SChapter> {
         println("chapterListParse")
 
@@ -143,75 +258,84 @@ class ManhwaLatino : ParsedHttpSource() {
         }
     }
 
-    private fun parseDate(date: String): Long {
-        return SimpleDateFormat("yyyy-MM-dd kk:mm:ss", Locale.US).parse(date)?.time ?: 0
-    }
+//    private fun parseDate(date: String): Long {
+//        return SimpleDateFormat("yyyy-MM-dd kk:mm:ss", Locale.US).parse(date)?.time ?: 0
+//    }
 
+    /**
+     * Returns a chapter from the given element.
+     *
+     * @param element an element obtained from [chapterListSelector].
+     */
     override fun chapterFromElement(element: Element) = throw Exception("Not used")
 
+    /**
+     * Returns the details of the manga from the given [document].
+     *
+     * @param document the parsed document.
+     */
     override fun mangaDetailsParse(document: Document): SManga {
-        println("== mangaDetailsParse ==")
         val manga = SManga.create()
-        manga.thumbnail_url = "test" // document.select("img[src*=cover]").attr("abs:src")
-        manga.description = document.select("div[id=sinopsis]").last().ownText()
-        manga.author = document.select("div[id=info-i]").text().let {
-            if (it.contains("Autor", true)) {
-                it.substringAfter("Autor:").substringBefore("Fecha:").trim()
-            } else "N/A"
-        }
-        manga.artist = manga.author
-        val glist = document.select("div[id=categ] a[href*=genero]").map { it.text() }
-        manga.genre = glist.joinToString(", ")
-        manga.status = when (document.select("span[id=desarrollo]")?.first()?.text()) {
-            "En desarrollo" -> SManga.ONGOING
-            // "Completed" -> SManga.COMPLETED
+        val tags = document.select("div.tags-content").text()
+        val descriptionList = document.select("div.summary__content.show-more p").map { it.text() }
+        val autor = document.select("div.author-content").text()
+        val artist = document.select("div.artist-content").text()
+        val genrelist = document.select(".genres-content a").map { it.text() }
+        val statusQuery = "div.summary_content div.post-status div.post-content_item div.summary-content"
+
+        manga.thumbnail_url = document.select(".summary_image img").attr("abs:data-src")
+        manga.description = "Tags: $tags\n\n" + descriptionList.joinToString("\n")
+        manga.author = if (autor.isBlank()) "Sin informacion del autor" else autor
+        manga.artist = if (artist.isBlank()) "Sin informacion del artista" else artist
+        manga.genre = genrelist.joinToString(", ")
+        manga.status = when (document.select(statusQuery)?.first()?.text()?.trim()) {
+            "Publicandose" -> SManga.ONGOING
             else -> SManga.UNKNOWN
         }
         return manga
     }
 
+    /**
+     * Returns the request for getting the page list. Override only if it's needed to override the
+     * url, send different headers or request method like POST.
+     * (Request to Webseite with comic)
+     *
+     * @param chapter the chapter whose page list has to be fetched.
+     */
     override fun pageListRequest(chapter: SChapter): Request {
-        println("== pageListRequest ==")
-        println("URL: $baseUrl${chapter.url}")
-        val r = POST(
-            baseUrl + chapter.url,
-            headersBuilder().add("Content-Type", "application/x-www-form-urlencoded").build(),
-            "info".toRequestBody(null)
-        )
-        println(r.toString())
-        return r
+        return GET(baseUrl + chapter.url, headers)
     }
 
+    /**
+     * Parses the response from the site and returns the page list.
+     * (Parse the comic pages from the website with the chapter)
+     *
+     * @param response the response from the site.
+     */
     override fun pageListParse(response: Response): List<Page> {
-        println("== pageListParse ==")
-//        println(
-//            response.asJsoup().select("div.page-break.no-gaps img")
-//                .mapIndexed {
-//                    index, imgElement ->
-//                    "$index, ${imgElement.attr("abs:data-src")}"
-//                }
-//        )
-//        println("$$$")
-
-        val l = response.asJsoup().select("div.page-break.no-gaps img").mapIndexed {
-                index, imgElement ->
+        return response.asJsoup().select("div.page-break.no-gaps img").mapIndexed {
+            index, imgElement ->
             Page(index, "", imgElement.attr("abs:data-src"))
         }
-//
-        l.forEach { page ->
-            println("page index: ${page.index}")
-            println("page uri: ${page.uri}")
-            println("page url: ${page.url}")
-            println("page imageUrl: ${page.imageUrl}")
-            println("---")
-        }
-
-        return l
     }
 
+    /**
+     * Returns a page list from the given document.
+     *
+     * @param document the parsed document.
+     */
     override fun pageListParse(document: Document) = throw Exception("Not Used")
+
+    /**
+     * Parse the response from the site and returns the absolute url to the source image.
+     *
+     * @param response the response from the site.
+     */
     override fun imageUrlParse(document: Document) = throw Exception("Not Used")
 
+    /**
+     * Returns the list of filters for the source.
+     */
     override fun getFilterList() = FilterList(
         Filter.Header("NOTA: ¡La búsqueda de títulos no funciona!"), // "Title search not working"
         Filter.Separator(),
