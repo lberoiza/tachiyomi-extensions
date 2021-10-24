@@ -21,9 +21,8 @@ open class UriPartFilter(
     override fun addToUri(uri: Uri.Builder) {
 
         if (state != 0 || !firstIsUnspecified) {
-            val genre = vals[state].first
-            uri.appendPath("manga-genre")
-                .appendPath(genre)
+            val filter = vals[state].first
+            uri.appendPath(filter)
         }
     }
 
