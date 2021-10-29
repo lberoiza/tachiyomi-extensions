@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.extension.es.manhwalatino.filters
 
-class GenreFilter : UriPartFilter(
+class GenreTagFilter : UriPartFilter(
     "Género o Tag",
     "filtro",
     arrayOf(

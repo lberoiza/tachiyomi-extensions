@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.extension.es.manhwalatino
 
-import eu.kanade.tachiyomi.extension.es.manhwalatino.filters.GenreFilter
+import eu.kanade.tachiyomi.extension.es.manhwalatino.filters.GenreTagFilter
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
@@ -302,7 +302,7 @@ class ManhwaLatino : ParsedHttpSource() {
     override fun getFilterList() = FilterList(
         Filter.Header("NOTA: ¡La búsqueda de títulos no funciona!"), // "Title search not working"
         Filter.Separator(),
-        GenreFilter(),
+        GenreTagFilter(),
 //        LetterFilter(),
 //        StatusFilter(),
 //        SortFilter()

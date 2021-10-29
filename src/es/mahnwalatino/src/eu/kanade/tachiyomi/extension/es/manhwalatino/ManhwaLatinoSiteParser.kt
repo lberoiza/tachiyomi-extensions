@@ -34,7 +34,7 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
     private val statusHTMLSelector: String =
         "div.summary_content div.post-status div.post-content_item div.summary-content"
     private val thumbnailUrlMangaDetailsHTMLSelector: String = "div.summary_image img"
-    private val tagsHTMLSelector: String = "div.tags-content"
+    private val tagsHTMLSelector: String = "div.tags-content a"
     private val searchSiteMangasHTMLSelector = "div.c-tabs-item__content"
     private val genreSiteMangasHTMLSelector = "div.page-item-detail.manga"
     private val latestUpdatesSelectorUrl = "div.slider__thumb_item a"
@@ -96,22 +96,32 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
 
         val manga = SManga.create()
 
-        val tags = document.select(tagsHTMLSelector).text()
         val descriptionList = document.select(descriptionHTMLSelector).map { it.text() }
         val author = document.select(authorHTMLSelector).text()
         val artist = document.select(artistHTMLSelector).text()
+
         val genrelist = document.select(genreHTMLSelector).map { it.text() }
+        val tagList = document.select(tagsHTMLSelector).map { it.text() }
+        val genreTagList = genrelist + tagList
 
         manga.thumbnail_url = document.select(thumbnailUrlMangaDetailsHTMLSelector).attr("abs:data-src")
-        manga.description = "Tags: $tags\n\n" + descriptionList.joinToString("\n")
-        manga.author = if (author.isBlank()) "Sin informacion del autor" else author
-        manga.artist = if (artist.isBlank()) "Sin informacion del artista" else artist
-        manga.genre = genrelist.joinToString(", ")
-        manga.status = when (document.select(statusHTMLSelector)?.first()?.text()?.trim()) {
-            "Publicandose" -> SManga.ONGOING
-            else -> SManga.UNKNOWN
-        }
+        manga.description = descriptionList.joinToString("\n")
+        manga.author = if (author.isBlank()) "Autor Desconocido" else author
+        manga.artist = artist
+        manga.genre = genreTagList.joinToString(", ")
+        manga.status = findMangaStatus(tagList, document)
         return manga
+    }
+
+    private fun findMangaStatus(tagList: List<String>, document: Document): Int {
+        return if (tagList.contains("Fin")) {
+            SManga.COMPLETED
+        } else {
+            when (document.select(statusHTMLSelector)?.first()?.text()?.trim()) {
+                "Publicandose" -> SManga.ONGOING
+                else -> SManga.UNKNOWN
+            }
+        }
     }
 
     fun hasNextPages(document: Document): Boolean {
