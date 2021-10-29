@@ -4,6 +4,8 @@ import android.net.Uri
 import eu.kanade.tachiyomi.extension.es.manhwalatino.filters.UriFilter
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
+import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.util.asJsoup
 import okhttp3.Response
@@ -40,6 +42,8 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
     private val latestUpdatesSelectorUrl = "div.slider__thumb_item a"
     private val latestUpdatesSelectorThumbnailUrl = "div.slider__thumb_item a img"
     private val latestUpdatesSelectorTitle = "div.slider__content h4"
+    private val chapterListParseSelector = "li.wp-manga-chapter a"
+    private val pageListParseSelector = "div.page-break.no-gaps img"
 
     val searchMangaNextPageSelector = "link[rel=next]"
     val latestUpdatesSelector = "div.slider__item"
@@ -74,12 +78,10 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
     fun latestUpdatesHasNextPages() = false
 
     fun getMangasFromSearchSite(document: Document): List<SManga> {
-        println("== manhwaLatinoSiteParser ==")
         return document.select(searchSiteMangasHTMLSelector).map { getMangaFromList(it) }
     }
 
     fun getMangasFromGenreSite(document: Document): List<SManga> {
-        println("== getMangasFromGenreSite ==")
         return document.select(genreSiteMangasHTMLSelector).map { getMangaFromList(it) }
     }
 
@@ -92,8 +94,6 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
     }
 
     fun getMangaDetails(document: Document): SManga {
-        println("== getMangaDetails ==")
-
         val manga = SManga.create()
 
         val descriptionList = document.select(descriptionHTMLSelector).map { it.text() }
@@ -124,8 +124,31 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
         }
     }
 
-    fun hasNextPages(document: Document): Boolean {
-        return !document.select(searchMangaNextPageSelector).isEmpty()
+    /**
+     * Parses the response from the site and returns a list of chapters.
+     *
+     * @param response the response from the site.
+     */
+    fun getChapterListParse(response: Response): List<SChapter> {
+        return response.asJsoup().select(chapterListParseSelector).map { element ->
+            SChapter.create().apply {
+                name = element.text()
+                url = getUrlWithoutDomain(element.attr("abs:href"))
+            }
+        }
+    }
+
+    /**
+     * Parses the response from the site and returns the page list.
+     * (Parse the comic pages from the website with the chapter)
+     *
+     * @param response the response from the site.
+     */
+    fun getPageListParse(response: Response): List<Page> {
+        val list = response.asJsoup().select(pageListParseSelector).mapIndexed { index, imgElement ->
+            Page(index, "", imgElement.attr("abs:data-src"))
+        }
+        return list
     }
 
     /**
@@ -171,6 +194,10 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
         }
 
         return MangasPage(mangas, hasNextPages)
+    }
+
+    fun hasNextPages(document: Document): Boolean {
+        return !document.select(searchMangaNextPageSelector).isEmpty()
     }
 
     protected fun getUrlWithoutDomain(url: String) = url.substringAfter(baseUrl)

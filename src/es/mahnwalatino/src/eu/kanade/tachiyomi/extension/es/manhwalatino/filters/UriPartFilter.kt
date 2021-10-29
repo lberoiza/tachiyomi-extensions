@@ -25,8 +25,4 @@ open class UriPartFilter(
             uri.appendPath(filter)
         }
     }
-
-//  fun optionSelected(): Boolean {
-//    return false
-//  }
 }

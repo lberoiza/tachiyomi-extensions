@@ -43,6 +43,9 @@ class ManhwaLatino : ParsedHttpSource() {
      */
     override val supportsLatest = true
 
+    /**
+     * User Agent for this wWebsite
+     */
     private val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
         "(KHTML, like Gecko) Chrome/80.0.3987.132 Safari/537.36"
 
@@ -56,7 +59,6 @@ class ManhwaLatino : ParsedHttpSource() {
      * Returns the Jsoup selector that returns a list of [Element] corresponding to each manga.
      */
     override fun popularMangaSelector(): String {
-        println("== popularMangaSelector ==")
         return manhwaLatinoSiteParser.popularMangaSelector
     }
 
@@ -64,7 +66,6 @@ class ManhwaLatino : ParsedHttpSource() {
      * Returns the Jsoup selector that returns a list of [Element] corresponding to each manga.
      */
     override fun latestUpdatesSelector(): String {
-        println("== latestUpdatesSelector ==")
         return manhwaLatinoSiteParser.latestUpdatesSelector
     }
 
@@ -72,7 +73,6 @@ class ManhwaLatino : ParsedHttpSource() {
      * Returns the Jsoup selector that returns a list of [Element] corresponding to each manga.
      */
     override fun searchMangaSelector(): String {
-        println("== searchMangaSelector ==")
         return manhwaLatinoSiteParser.searchMangaSelector
     }
 
@@ -87,7 +87,6 @@ class ManhwaLatino : ParsedHttpSource() {
      * there's no next page.
      */
     override fun popularMangaNextPageSelector(): String {
-        println("== popularMangaNextPageSelector ==")
         return manhwaLatinoSiteParser.popularMangaNextPageSelector
     }
 
@@ -96,7 +95,6 @@ class ManhwaLatino : ParsedHttpSource() {
      * there's no next page.
      */
     override fun latestUpdatesNextPageSelector(): String {
-        println("== latestUpdatesNextPageSelector ==")
         return manhwaLatinoSiteParser.latestUpdatesNextPageSelector
     }
 
@@ -105,7 +103,6 @@ class ManhwaLatino : ParsedHttpSource() {
      * there's no next page.
      */
     override fun searchMangaNextPageSelector(): String {
-        println("== searchMangaNextPageSelector ==")
         return manhwaLatinoSiteParser.searchMangaNextPageSelector
     }
 
@@ -115,7 +112,6 @@ class ManhwaLatino : ParsedHttpSource() {
      * @param page the page number to retrieve.
      */
     override fun popularMangaRequest(page: Int): Request {
-        println("== popularMangaRequest ==")
         return GET("$baseUrl/page/$page/", headers)
     }
 
@@ -125,7 +121,6 @@ class ManhwaLatino : ParsedHttpSource() {
      * @param page the page number to retrieve.
      */
     override fun latestUpdatesRequest(page: Int): Request {
-        println("== latestUpdatesRequest ==")
         return GET("$baseUrl/page/$page/", headers)
     }
 
@@ -221,19 +216,8 @@ class ManhwaLatino : ParsedHttpSource() {
      * @param response the response from the site.
      */
     override fun chapterListParse(response: Response): List<SChapter> {
-        println("chapterListParse")
-
-        return response.asJsoup().select("li.wp-manga-chapter a").map { element ->
-            SChapter.create().apply {
-                name = element.text()
-                setUrlWithoutDomain(element.attr("abs:href"))
-            }
-        }
+        return manhwaLatinoSiteParser.getChapterListParse(response)
     }
-
-//    private fun parseDate(date: String): Long {
-//        return SimpleDateFormat("yyyy-MM-dd kk:mm:ss", Locale.US).parse(date)?.time ?: 0
-//    }
 
     /**
      * Returns a chapter from the given element.
@@ -248,20 +232,7 @@ class ManhwaLatino : ParsedHttpSource() {
      * @param document the parsed document.
      */
     override fun mangaDetailsParse(document: Document): SManga {
-        println("======== mangaDetailsParse ===========")
-        println("======== ================= ===========")
-
-        val manga = manhwaLatinoSiteParser.getMangaDetails(document)
-
-        println("manga.author: ${manga.author}")
-        println("manga.artist: ${manga.artist}")
-        println("manga.description: ${manga.description}")
-        println("manga.genre: ${manga.genre}")
-        println("manga.initialized: ${manga.initialized}")
-        println("manga.status: ${manga.status}")
-        println("manga.thumbnail_url: ${manga.thumbnail_url}")
-
-        return manga
+        return manhwaLatinoSiteParser.getMangaDetails(document)
     }
 
     /**
@@ -282,9 +253,7 @@ class ManhwaLatino : ParsedHttpSource() {
      * @param response the response from the site.
      */
     override fun pageListParse(response: Response): List<Page> {
-        return response.asJsoup().select("div.page-break.no-gaps img").mapIndexed { index, imgElement ->
-            Page(index, "", imgElement.attr("abs:data-src"))
-        }
+        return manhwaLatinoSiteParser.getPageListParse(response)
     }
 
     /**
