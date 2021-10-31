@@ -11,6 +11,9 @@ import eu.kanade.tachiyomi.util.asJsoup
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 class ManhwaLatinoSiteParser(private val baseUrl: String) {
 
@@ -42,7 +45,10 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
     private val latestUpdatesSelectorUrl = "div.slider__thumb_item a"
     private val latestUpdatesSelectorThumbnailUrl = "div.slider__thumb_item a img"
     private val latestUpdatesSelectorTitle = "div.slider__content h4"
-    private val chapterListParseSelector = "li.wp-manga-chapter a"
+    private val chapterListParseSelector = "li.wp-manga-chapter"
+    private val chapterLinkParser = "a"
+    private val chapterReleaseDateLinkParser = "span.chapter-release-date a"
+    private val chapterReleaseDateIParser = "span.chapter-release-date i"
     private val pageListParseSelector = "div.page-break.no-gaps img"
 
     val searchMangaNextPageSelector = "link[rel=next]"
@@ -131,10 +137,70 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
      */
     fun getChapterListParse(response: Response): List<SChapter> {
         return response.asJsoup().select(chapterListParseSelector).map { element ->
+            // Link to the Chapter with the info (address and chapter title)
+            val chapterInfo = element.select(chapterLinkParser)
+            val chapterName = chapterInfo.text()
+            // release date came as text with format dd/mm/yyyy
+            val chapterReleaseDate = getChapterReleaseDate(element)
             SChapter.create().apply {
-                name = element.text()
-                url = getUrlWithoutDomain(element.attr("abs:href"))
+                name = chapterName
+                chapter_number = getChapterNumber(chapterName)
+                url = getUrlWithoutDomain(chapterInfo.attr("abs:href"))
+                date_upload = parseChapterReleaseDate(chapterReleaseDate)
             }
+        }
+    }
+
+    /**
+     * Get the number of Chapter from Chaptername
+     */
+    private fun getChapterNumber(chapterName: String): Float =
+        chapterName.substringAfter("Capitulo").trim().toFloat()
+
+    /**
+     * Get The String with the information about the Release date of the Chapter
+     */
+    private fun getChapterReleaseDate(element: Element): String {
+        val chapterReleaseDateLink = element.select(chapterReleaseDateLinkParser).attr("title")
+        val chapterReleaseDateI = element.select(chapterReleaseDateIParser).text()
+        return when {
+            chapterReleaseDateLink.isNotEmpty() -> chapterReleaseDateLink
+            chapterReleaseDateI.isNotEmpty() -> chapterReleaseDateI
+            else -> ""
+        }
+    }
+
+    /**
+     * Transform String with the Date of Release into Long format
+     */
+    private fun parseChapterReleaseDate(dateStr: String): Long {
+        val calendar = Calendar.getInstance()
+        val regExMins = Regex("""hace\s+(\d+)\s+mins?""")
+        val regExHours = Regex("""hace\s+(\d+)\s+horas?""")
+        val regExDays = Regex("""hace\s+(\d+)\s+días?""")
+        val regExDate = Regex("""\d+/\d+/\d+""")
+
+        return when {
+            regExMins.containsMatchIn(dateStr) -> {
+                val mins = Regex("""\d+""").find(dateStr)?.value.toString()
+                calendar.add(Calendar.MINUTE, -mins.toInt())
+                calendar.timeInMillis
+            }
+
+            regExHours.containsMatchIn(dateStr) -> {
+                val hours = Regex("""\d+""").find(dateStr)?.value.toString()
+                calendar.add(Calendar.HOUR, -hours.toInt())
+                calendar.timeInMillis
+            }
+            regExDays.containsMatchIn(dateStr) -> {
+                val days = Regex("""\d+""").find(dateStr)?.value.toString()
+                calendar.add(Calendar.DAY_OF_YEAR, -days.toInt())
+                calendar.timeInMillis
+            }
+            regExDate.containsMatchIn(dateStr) -> {
+                SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(dateStr).time
+            }
+            else -> 0
         }
     }
 
