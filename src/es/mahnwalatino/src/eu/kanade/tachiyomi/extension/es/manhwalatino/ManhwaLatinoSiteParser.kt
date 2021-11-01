@@ -54,24 +54,14 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
     val searchMangaNextPageSelector = "link[rel=next]"
     val latestUpdatesSelector = "div.slider__item"
 
-    // TODO TO BE DEFINDED
     val popularMangaSelector = "div.page-item-detail.manga"
     val searchMangaSelector = "div.page-item-detail.manga"
     val popularMangaNextPageSelector = "a.nextpostslink"
     val latestUpdatesNextPageSelector = "div[role=navigation] a.last"
-    //
 
     /**
-     * Parses the response from the site and returns a [MangasPage] object.
-     *
-     * @param response the response from the site.
+     * The Latest Updates are in a Slider, this Methods get a Manga from the slide
      */
-    fun latestUpdatesParse(response: Response): MangasPage {
-        val document = response.asJsoup()
-        val mangas = document.select(latestUpdatesSelector).map { getMangaFromLastTranslatedSlide(it) }
-        return MangasPage(mangas, false)
-    }
-
     fun getMangaFromLastTranslatedSlide(element: Element): SManga {
         val manga = SManga.create()
         manga.url =
@@ -81,16 +71,29 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
         return manga
     }
 
+    /**
+     * The Latest Updates has only one site
+     */
     fun latestUpdatesHasNextPages() = false
 
+    /**
+     * Get eine Liste mit Mangas from Search Site
+     */
     fun getMangasFromSearchSite(document: Document): List<SManga> {
         return document.select(searchSiteMangasHTMLSelector).map { getMangaFromList(it) }
     }
 
+    /**
+     * Get eine Liste mit Mangas from Genre Site
+     */
     fun getMangasFromGenreSite(document: Document): List<SManga> {
         return document.select(genreSiteMangasHTMLSelector).map { getMangaFromList(it) }
     }
 
+    /**
+     * Parse The Information from Mangas From Search or Genre Site
+     * Title, Address and thumbnail_url
+     */
     fun getMangaFromList(element: Element): SManga {
         val manga = SManga.create()
         manga.url = getUrlWithoutDomain(element.select(urlHTMLSelector).first().attr("abs:href"))
@@ -99,6 +102,11 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
         return manga
     }
 
+    /**
+     * Get The Details of a Manga Main Website
+     * Description, genre, tags, picture (thumbnail_url)
+     * status...
+     */
     fun getMangaDetails(document: Document): SManga {
         val manga = SManga.create()
 
@@ -263,9 +271,15 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
         return MangasPage(mangas, hasNextPages)
     }
 
+    /**
+     * Check if there ir another page to show
+     */
     fun hasNextPages(document: Document): Boolean {
         return !document.select(searchMangaNextPageSelector).isEmpty()
     }
 
+    /**
+     * Create a Address url without the base url.
+     */
     protected fun getUrlWithoutDomain(url: String) = url.substringAfter(baseUrl)
 }
