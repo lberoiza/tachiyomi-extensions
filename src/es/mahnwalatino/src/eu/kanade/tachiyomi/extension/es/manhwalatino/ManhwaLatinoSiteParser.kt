@@ -139,8 +139,9 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
         return response.asJsoup().select(chapterListParseSelector).map { element ->
             // Link to the Chapter with the info (address and chapter title)
             val chapterInfo = element.select(chapterLinkParser)
-            val chapterName = chapterInfo.text()
-            // release date came as text with format dd/mm/yyyy
+            // Chaptername
+            val chapterName = chapterInfo.text().trim()
+            // release date came as text with format dd/mm/yyyy from a link or <i>dd/mm/yyyy</i>
             val chapterReleaseDate = getChapterReleaseDate(element)
             SChapter.create().apply {
                 name = chapterName
@@ -155,7 +156,7 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
      * Get the number of Chapter from Chaptername
      */
     private fun getChapterNumber(chapterName: String): Float =
-        chapterName.substringAfter("Capitulo").trim().toFloat()
+        Regex("""\d+""").find(chapterName)?.value.toString().trim().toFloat()
 
     /**
      * Get The String with the information about the Release date of the Chapter
