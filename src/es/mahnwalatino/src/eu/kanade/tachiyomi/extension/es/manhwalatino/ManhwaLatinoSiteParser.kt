@@ -118,7 +118,8 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
         val tagList = document.select(tagsHTMLSelector).map { it.text() }
         val genreTagList = genrelist + tagList
 
-        manga.thumbnail_url = document.select(thumbnailUrlMangaDetailsHTMLSelector).attr("abs:data-src")
+        manga.thumbnail_url =
+            document.select(thumbnailUrlMangaDetailsHTMLSelector).attr("abs:data-src")
         manga.description = descriptionList.joinToString("\n")
         manga.author = if (author.isBlank()) "Autor Desconocido" else author
         manga.artist = artist
@@ -182,35 +183,42 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
     /**
      * Transform String with the Date of Release into Long format
      */
-    private fun parseChapterReleaseDate(dateStr: String): Long {
-        val calendar = Calendar.getInstance()
+    private fun parseChapterReleaseDate(releaseDateStr: String): Long {
+        val regExSecs = Regex("""hace\s+(\d+)\s+segundos?""")
         val regExMins = Regex("""hace\s+(\d+)\s+mins?""")
         val regExHours = Regex("""hace\s+(\d+)\s+horas?""")
         val regExDays = Regex("""hace\s+(\d+)\s+días?""")
         val regExDate = Regex("""\d+/\d+/\d+""")
 
         return when {
-            regExMins.containsMatchIn(dateStr) -> {
-                val mins = Regex("""\d+""").find(dateStr)?.value.toString()
-                calendar.add(Calendar.MINUTE, -mins.toInt())
-                calendar.timeInMillis
-            }
+            regExSecs.containsMatchIn(releaseDateStr) ->
+                getReleaseTime(releaseDateStr, Calendar.SECOND)
 
-            regExHours.containsMatchIn(dateStr) -> {
-                val hours = Regex("""\d+""").find(dateStr)?.value.toString()
-                calendar.add(Calendar.HOUR, -hours.toInt())
-                calendar.timeInMillis
-            }
-            regExDays.containsMatchIn(dateStr) -> {
-                val days = Regex("""\d+""").find(dateStr)?.value.toString()
-                calendar.add(Calendar.DAY_OF_YEAR, -days.toInt())
-                calendar.timeInMillis
-            }
-            regExDate.containsMatchIn(dateStr) -> {
-                SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(dateStr).time
-            }
+            regExMins.containsMatchIn(releaseDateStr) ->
+                getReleaseTime(releaseDateStr, Calendar.MINUTE)
+
+            regExHours.containsMatchIn(releaseDateStr) ->
+                getReleaseTime(releaseDateStr, Calendar.HOUR)
+
+            regExDays.containsMatchIn(releaseDateStr) ->
+                getReleaseTime(releaseDateStr, Calendar.DAY_OF_YEAR)
+
+            regExDate.containsMatchIn(releaseDateStr) ->
+                SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(releaseDateStr).time
+
             else -> 0
         }
+    }
+
+    /**
+     * Extract the Release time from a Text String
+     * Format of the String "hace\s+\d+\s(segundo|minuto|hora|dia)s?"
+     */
+    private fun getReleaseTime(releaseDateStr: String, timeType: Int): Long {
+        val releaseTimeAgo = Regex("""\d+""").find(releaseDateStr)?.value.toString().toInt()
+        val calendar = Calendar.getInstance()
+        calendar.add(timeType, -releaseTimeAgo)
+        return calendar.timeInMillis
     }
 
     /**
@@ -220,9 +228,10 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
      * @param response the response from the site.
      */
     fun getPageListParse(response: Response): List<Page> {
-        val list = response.asJsoup().select(pageListParseSelector).mapIndexed { index, imgElement ->
-            Page(index, "", imgElement.attr("abs:data-src"))
-        }
+        val list =
+            response.asJsoup().select(pageListParseSelector).mapIndexed { index, imgElement ->
+                Page(index, "", imgElement.attr("abs:data-src"))
+            }
         return list
     }
 
