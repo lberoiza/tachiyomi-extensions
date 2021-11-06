@@ -5,8 +5,11 @@ ext {
     extName = 'Manhwa-Latino'
     pkgNameSuffix = 'es.manhwalatino'
     extClass = '.ManhwaLatino'
-    extVersionCode = 11
+    extVersionCode = 12
     containsNsfw = true
 }
 
+dependencies {
+    implementation project(path: ':lib-ratelimit')
+}
 apply from: "$rootDir/common.gradle"
