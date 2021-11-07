@@ -8,13 +8,16 @@ import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.source.online.ParsedHttpSource
 import eu.kanade.tachiyomi.util.asJsoup
+import okhttp3.Headers
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
-class ManhwaLatino : ManhwaLatinoParseHttpSource() {
+class ManhwaLatino : ParsedHttpSource() {
 
     /**
      * Name of the source.
@@ -30,6 +33,26 @@ class ManhwaLatino : ManhwaLatinoParseHttpSource() {
      * Parser for Mainsite or Genre Site
      */
     val manhwaLatinoSiteParser = ManhwaLatinoSiteParser(baseUrl)
+
+    /**
+     * User Agent for Android for this Website
+     */
+    private val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/80.0.3987.132 Safari/537.36"
+
+    /**
+     * Header for Request
+     */
+    override fun headersBuilder(): Headers.Builder {
+        return Headers.Builder()
+            .add("User-Agent", userAgent)
+            .add("Referer", "$baseUrl")
+    }
+
+    /**
+     * Client
+     */
+    override val client = OkHttpClient()
 
     /**
      * An ISO 639-1 compliant language code (two letters in lower case).
