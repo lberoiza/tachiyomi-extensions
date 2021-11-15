@@ -37,22 +37,21 @@ class ManhwaLatino : ParsedHttpSource() {
     /**
      * User Agent for Android for this Website
      */
-    private val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-        "(KHTML, like Gecko) Chrome/80.0.3987.132 Safari/537.36"
+//    private val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36"
 
     /**
      * Header for Request
      */
     override fun headersBuilder(): Headers.Builder {
         return Headers.Builder()
-            .add("User-Agent", userAgent)
+//            .add("User-Agent", userAgent)
             .add("Referer", "$baseUrl")
     }
 
     /**
-     * Client
+     * Http Client
      */
-    override val client = OkHttpClient()
+    override val client: OkHttpClient = network.client.newBuilder().build()
 
     /**
      * An ISO 639-1 compliant language code (two letters in lower case).
@@ -62,7 +61,7 @@ class ManhwaLatino : ParsedHttpSource() {
     /**
      * Whether the source has support for latest updates.
      */
-    override val supportsLatest = true
+    override val supportsLatest = false
 
     /**
      * Returns the Jsoup selector that returns a list of [Element] corresponding to each manga.
