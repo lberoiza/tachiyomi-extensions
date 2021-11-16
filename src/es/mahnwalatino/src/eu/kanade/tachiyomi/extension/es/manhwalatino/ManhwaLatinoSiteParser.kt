@@ -16,6 +16,9 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
+const val PREFIX_MANGA_ID_SEARCH = "id:"
+const val PREFIX_MANGA_CHAPTER_SEARCH = "ch:"
+
 class ManhwaLatinoSiteParser(private val baseUrl: String) {
 
     /**
@@ -144,8 +147,8 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
             return SManga.COMPLETED
         }
         elements?.forEach { element ->
-            val key = element.select("summary-heading h5")?.text()?.trim()
-            val value = element.select("summary-content")?.text()?.trim()
+            val key = element.select("div.summary-heading h5")?.text()?.trim()
+            val value = element.select("div.summary-content")?.text()?.trim()
 
             if (key == "Estado") {
                 return when (value) {
