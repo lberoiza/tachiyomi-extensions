@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.extension.es.manhwalatino
 
 import eu.kanade.tachiyomi.extension.es.manhwalatino.filters.GenreTagFilter
 import eu.kanade.tachiyomi.network.GET
+import eu.kanade.tachiyomi.network.asObservableSuccess
 import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
@@ -16,6 +17,7 @@ import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import rx.Observable
 
 class ManhwaLatino : ParsedHttpSource() {
 
@@ -61,7 +63,7 @@ class ManhwaLatino : ParsedHttpSource() {
     /**
      * Whether the source has support for latest updates.
      */
-    override val supportsLatest = false
+    override val supportsLatest = true
 
     /**
      * Returns the Jsoup selector that returns a list of [Element] corresponding to each manga.
@@ -163,6 +165,30 @@ class ManhwaLatino : ParsedHttpSource() {
     override fun searchMangaRequest(page: Int, query: String, filters: FilterList): Request {
         val uri = manhwaLatinoSiteParser.searchMangaRequest(page, query, filters)
         return GET(uri.toString(), headers)
+    }
+
+    private fun searchMangaByIdRequest(urlAdress: String) = GET("$baseUrl/$urlAdress", headers)
+
+    override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
+        val mangaPages = if (query.startsWith(PREFIX_MANGA_ID_SEARCH)) {
+            val realQuery = query.removePrefix(PREFIX_MANGA_ID_SEARCH)
+
+            client.newCall(searchMangaByIdRequest(realQuery))
+                .asObservableSuccess()
+                .map { response ->
+                    val details = mangaDetailsParse(response)
+                    details.url = "/$PREFIX_MANGA_ID_SEARCH/$realQuery"
+                    MangasPage(listOf(details), false)
+                }
+        } else {
+            client.newCall(searchMangaRequest(page, query, filters))
+                .asObservableSuccess()
+                .map { response ->
+                    searchMangaParse(response)
+                }
+        }
+
+        return mangaPages
     }
 
     /**
