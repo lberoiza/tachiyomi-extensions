@@ -2,16 +2,21 @@ package eu.kanade.tachiyomi.extension.es.manhwalatino
 
 import android.net.Uri
 import eu.kanade.tachiyomi.extension.es.manhwalatino.filters.UriFilter
+import eu.kanade.tachiyomi.network.GET
+import eu.kanade.tachiyomi.network.asObservableSuccess
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.util.asJsoup
+import okhttp3.Headers
+import okhttp3.OkHttpClient
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import org.jsoup.select.Elements
+import rx.Observable
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -19,13 +24,45 @@ import java.util.Locale
 const val PREFIX_MANGA_ID_SEARCH = "id:"
 const val PREFIX_MANGA_CHAPTER_SEARCH = "ch:"
 
-class ManhwaLatinoSiteParser(private val baseUrl: String) {
+class ManhwaLatinoSiteParser(
+    private val baseUrl: String,
+    private val client: OkHttpClient,
+    private val headers: Headers
+) {
 
     /**
-     * TODO: ADD SEARCH_TAG
+     * Search Type
      */
     enum class SearchType {
         SEARCH_FREE, SEARCH_FILTER
+    }
+
+    /**
+     * Type of manga
+     */
+    enum class MangaType {
+        ALL, ADULT, GAY;
+
+        // Static Enum Function
+        companion object {
+            fun isForAdults(mangaTypes: List<MangaType>): Boolean {
+                for (type in mangaTypes) {
+                    when (type) {
+                        ADULT, GAY -> return true
+                    }
+                }
+                return false
+            }
+        }
+
+        // CSS Class to search in the title of the manga
+        fun getBadge(): String {
+            return when (this) {
+                ADULT -> "adult"
+                GAY -> "gay"
+                ALL -> ""
+            }
+        }
     }
 
     val searchMangaNextPageSelector = "link[rel=next]"
@@ -85,9 +122,30 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
     fun latestUpdatesHasNextPages() = false
 
     /**
+     * Search the information of a Manga with the URL-Address
+     */
+    fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
+        return if (query.startsWith(PREFIX_MANGA_ID_SEARCH)) {
+            val realQuery = query.removePrefix(PREFIX_MANGA_ID_SEARCH)
+            client.newCall(GET("$baseUrl/$realQuery", headers))
+                .asObservableSuccess().map { response ->
+                    val details = getMangaDetails(response.asJsoup())
+                    details.url = "/$realQuery"
+                    MangasPage(listOf(details), false)
+                }
+        } else {
+            val request = GET(searchMangaRequest(page, query, filters).toString(), headers)
+            client.newCall(request)
+                .asObservableSuccess().map { response ->
+                    searchMangaParse(response)
+                }
+        }
+    }
+
+    /**
      * Get eine Liste mit Mangas from Search Site
      */
-    fun getMangasFromSearchSite(document: Document): List<SManga> {
+    private fun getMangasFromSearchSite(document: Document): List<SManga> {
         return document.select(searchSiteMangasHTMLSelector).map {
             val manga = SManga.create()
             manga.url = getUrlWithoutDomain(it.select(searchPageUrlHTMLSelector).attr("abs:href"))
@@ -100,7 +158,7 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
     /**
      * Get eine Liste mit Mangas from Genre Site
      */
-    fun getMangasFromGenreSite(document: Document): List<SManga> {
+    private fun getMangasFromGenreSite(document: Document): List<SManga> {
         return document.select(genreSiteMangasHTMLSelector).map { getMangaFromList(it) }
     }
 
@@ -124,6 +182,8 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
     fun getMangaDetails(document: Document): SManga {
         val manga = SManga.create()
 
+        val titleElements = document.select("#manga-title h1")
+        val mangaType = getMangaBadges(titleElements)
         val descriptionList = document.select(mangaDetailsDescriptionHTMLSelector).map { it.text() }
         val author = document.select(mangaDetailsAuthorHTMLSelector).text()
         val artist = document.select(mangaDetailsArtistHTMLSelector).text()
@@ -132,6 +192,7 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
         val tagList = document.select(mangaDetailsTagsHTMLSelector).map { it.text() }
         val genreTagList = genrelist + tagList
 
+        manga.title = titleElements.last().ownText().trim()
         manga.thumbnail_url =
             document.select(mangaDetailsThumbnailUrlHTMLSelector).attr("abs:data-src")
         manga.description = descriptionList.joinToString("\n")
@@ -142,11 +203,29 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
         return manga
     }
 
+    /**
+     * Types of the Manga
+     * Return aList with all Types from a Manga
+     *  for example Adults, Gay
+     *  if the list is empty the manga is for everyone
+     */
+    private fun getMangaBadges(titleBadges: Elements): List<MangaType> {
+        val types = mutableListOf<MangaType>()
+
+        for (badge in titleBadges.select("span")) {
+            if (badge.hasClass(MangaType.ADULT.getBadge()))
+                types.add(MangaType.ADULT)
+            if (badge.hasClass(MangaType.GAY.getBadge()))
+                types.add(MangaType.GAY)
+        }
+        return types
+    }
+
     private fun findMangaStatus(tagList: List<String>, elements: Elements): Int {
         if (tagList.contains("Fin")) {
             return SManga.COMPLETED
         }
-        elements?.forEach { element ->
+        elements.forEach { element ->
             val key = element.select("div.summary-heading h5")?.text()?.trim()
             val value = element.select("div.summary-content")?.text()?.trim()
 
@@ -225,7 +304,7 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
                 getReleaseTime(releaseDateStr, Calendar.DAY_OF_YEAR)
 
             regExDate.containsMatchIn(releaseDateStr) ->
-                SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(releaseDateStr).time
+                SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(releaseDateStr)!!.time
 
             else -> 0
         }
@@ -291,11 +370,11 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
         val hasNextPages = hasNextPages(document)
         val mangas: List<SManga>
 
-        when (searchType) {
+        mangas = when (searchType) {
             SearchType.SEARCH_FREE ->
-                mangas = getMangasFromSearchSite(document)
+                getMangasFromSearchSite(document)
             SearchType.SEARCH_FILTER ->
-                mangas = getMangasFromGenreSite(document)
+                getMangasFromGenreSite(document)
         }
 
         return MangasPage(mangas, hasNextPages)
@@ -304,12 +383,12 @@ class ManhwaLatinoSiteParser(private val baseUrl: String) {
     /**
      * Check if there ir another page to show
      */
-    fun hasNextPages(document: Document): Boolean {
+    private fun hasNextPages(document: Document): Boolean {
         return !document.select(searchMangaNextPageSelector).isEmpty()
     }
 
     /**
      * Create a Address url without the base url.
      */
-    protected fun getUrlWithoutDomain(url: String) = url.substringAfter(baseUrl)
+    private fun getUrlWithoutDomain(url: String) = url.substringAfter(baseUrl)
 }

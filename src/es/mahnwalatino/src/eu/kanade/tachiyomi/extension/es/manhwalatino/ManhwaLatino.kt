@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.extension.es.manhwalatino
 
 import eu.kanade.tachiyomi.extension.es.manhwalatino.filters.GenreTagFilter
 import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.network.asObservableSuccess
 import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
@@ -32,11 +31,6 @@ class ManhwaLatino : ParsedHttpSource() {
     override val baseUrl = "https://manhwa-latino.com"
 
     /**
-     * Parser for Mainsite or Genre Site
-     */
-    val manhwaLatinoSiteParser = ManhwaLatinoSiteParser(baseUrl)
-
-    /**
      * User Agent for Android for this Website
      */
 //    private val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36"
@@ -54,6 +48,11 @@ class ManhwaLatino : ParsedHttpSource() {
      * Http Client
      */
     override val client: OkHttpClient = network.client.newBuilder().build()
+
+    /**
+     * Parser for Mainsite or Genre Site
+     */
+    val manhwaLatinoSiteParser = ManhwaLatinoSiteParser(baseUrl, client, headers)
 
     /**
      * An ISO 639-1 compliant language code (two letters in lower case).
@@ -167,28 +166,8 @@ class ManhwaLatino : ParsedHttpSource() {
         return GET(uri.toString(), headers)
     }
 
-    private fun searchMangaByIdRequest(urlAdress: String) = GET("$baseUrl/$urlAdress", headers)
-
     override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
-        val mangaPages = if (query.startsWith(PREFIX_MANGA_ID_SEARCH)) {
-            val realQuery = query.removePrefix(PREFIX_MANGA_ID_SEARCH)
-
-            client.newCall(searchMangaByIdRequest(realQuery))
-                .asObservableSuccess()
-                .map { response ->
-                    val details = mangaDetailsParse(response)
-                    details.url = "/$PREFIX_MANGA_ID_SEARCH/$realQuery"
-                    MangasPage(listOf(details), false)
-                }
-        } else {
-            client.newCall(searchMangaRequest(page, query, filters))
-                .asObservableSuccess()
-                .map { response ->
-                    searchMangaParse(response)
-                }
-        }
-
-        return mangaPages
+        return manhwaLatinoSiteParser.fetchSearchManga(page, query, filters)
     }
 
     /**
