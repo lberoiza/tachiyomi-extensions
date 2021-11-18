@@ -18,7 +18,7 @@ class ManhwaLatinoUrlActivity : Activity() {
 
             val mainIntent = Intent().apply {
                 action = "eu.kanade.tachiyomi.SEARCH"
-                putExtra("query", "${PREFIX_MANGA_ID_SEARCH}$type/$mangaName")
+                putExtra("query", "${MLConstants.PREFIX_MANGA_ID_SEARCH}$type/$mangaName")
                 putExtra("filter", packageName)
             }
 

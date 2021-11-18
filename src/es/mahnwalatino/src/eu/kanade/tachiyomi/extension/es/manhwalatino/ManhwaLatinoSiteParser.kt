@@ -21,9 +21,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-const val PREFIX_MANGA_ID_SEARCH = "id:"
-const val PREFIX_MANGA_CHAPTER_SEARCH = "ch:"
-
 class ManhwaLatinoSiteParser(
     private val baseUrl: String,
     private val client: OkHttpClient,
@@ -65,40 +62,6 @@ class ManhwaLatinoSiteParser(
         }
     }
 
-    val searchMangaNextPageSelector = "link[rel=next]"
-    val latestUpdatesSelector = "div.slider__item"
-    val searchMangaSelector = "div.page-item-detail.manga"
-    val popularMangaNextPageSelector = "a.nextpostslink"
-    val latestUpdatesNextPageSelector = "div[role=navigation] a.last"
-
-    val popularMangaSelector = "div.page-item-detail.manga"
-
-    private val popularGenreTitleHTMLSelector: String = "div.item-summary div.post-title h3"
-    private val popularGenreUrlHTMLSelector: String = "div.item-summary div.post-title h3 a"
-    private val popularGenreThumbnailUrlMangaHTMLSelector: String = "div.item-thumb.c-image-hover img"
-
-    private val searchPageTitleHTMLSelector: String = "div.tab-summary div.post-title h3"
-    private val searchPageUrlHTMLSelector: String = "div.tab-summary div.post-title h3 a"
-    private val searchPageThumbnailUrlMangaHTMLSelector: String = "div.tab-thumb.c-image-hover img"
-
-    private val mangaDetailsThumbnailUrlHTMLSelector: String = "div.summary_image img"
-    private val mangaDetailsAuthorHTMLSelector: String = "div.author-content"
-    private val mangaDetailsArtistHTMLSelector: String = "div.artist-content"
-    private val mangaDetailsDescriptionHTMLSelector: String = "div.post-content_item > div > p"
-    private val mangaDetailsGenreHTMLSelector: String = "div.genres-content a"
-    private val mangaDetailsTagsHTMLSelector: String = "div.tags-content a"
-    private val mangaDetailsAttributes: String = "div.summary_content div.post-content_item"
-    private val searchSiteMangasHTMLSelector = "div.c-tabs-item__content"
-    private val genreSiteMangasHTMLSelector = "div.page-item-detail.manga"
-    private val latestUpdatesSelectorUrl = "div.slider__thumb_item > a"
-    private val latestUpdatesSelectorThumbnailUrl = "div.slider__thumb_item > a > img"
-    private val latestUpdatesSelectorTitle = "div.slider__content h4"
-    private val chapterListParseSelector = "li.wp-manga-chapter"
-    private val chapterLinkParser = "a"
-    private val chapterReleaseDateLinkParser = "span.chapter-release-date a"
-    private val chapterReleaseDateIParser = "span.chapter-release-date i"
-    private val pageListParseSelector = "div.page-break.no-gaps img"
-
     /**
      * Type of search ( FREE, FILTER)
      */
@@ -110,9 +73,9 @@ class ManhwaLatinoSiteParser(
     fun getMangaFromLastTranslatedSlide(element: Element): SManga {
         val manga = SManga.create()
         manga.url =
-            getUrlWithoutDomain(element.select(latestUpdatesSelectorUrl).first().attr("abs:href"))
-        manga.title = element.select(latestUpdatesSelectorTitle).text().trim()
-        manga.thumbnail_url = element.select(latestUpdatesSelectorThumbnailUrl).attr("abs:src").replace("//", "/")
+            getUrlWithoutDomain(element.select(MLConstants.latestUpdatesSelectorUrl).first().attr("abs:href"))
+        manga.title = element.select(MLConstants.latestUpdatesSelectorTitle).text().trim()
+        manga.thumbnail_url = element.select(MLConstants.latestUpdatesSelectorThumbnailUrl).attr("abs:src").replace("//", "/")
         return manga
     }
 
@@ -125,8 +88,8 @@ class ManhwaLatinoSiteParser(
      * Search the information of a Manga with the URL-Address
      */
     fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
-        return if (query.startsWith(PREFIX_MANGA_ID_SEARCH)) {
-            val realQuery = query.removePrefix(PREFIX_MANGA_ID_SEARCH)
+        return if (query.startsWith(MLConstants.PREFIX_MANGA_ID_SEARCH)) {
+            val realQuery = query.removePrefix(MLConstants.PREFIX_MANGA_ID_SEARCH)
             client.newCall(GET("$baseUrl/$realQuery", headers))
                 .asObservableSuccess().map { response ->
                     val details = getMangaDetails(response.asJsoup())
@@ -146,11 +109,11 @@ class ManhwaLatinoSiteParser(
      * Get eine Liste mit Mangas from Search Site
      */
     private fun getMangasFromSearchSite(document: Document): List<SManga> {
-        return document.select(searchSiteMangasHTMLSelector).map {
+        return document.select(MLConstants.searchSiteMangasHTMLSelector).map {
             val manga = SManga.create()
-            manga.url = getUrlWithoutDomain(it.select(searchPageUrlHTMLSelector).attr("abs:href"))
-            manga.title = it.select(searchPageTitleHTMLSelector).text().trim()
-            manga.thumbnail_url = it.select(searchPageThumbnailUrlMangaHTMLSelector).attr("abs:data-src")
+            manga.url = getUrlWithoutDomain(it.select(MLConstants.searchPageUrlHTMLSelector).attr("abs:href"))
+            manga.title = it.select(MLConstants.searchPageTitleHTMLSelector).text().trim()
+            manga.thumbnail_url = it.select(MLConstants.searchPageThumbnailUrlMangaHTMLSelector).attr("abs:data-src")
             manga
         }
     }
@@ -159,7 +122,7 @@ class ManhwaLatinoSiteParser(
      * Get eine Liste mit Mangas from Genre Site
      */
     private fun getMangasFromGenreSite(document: Document): List<SManga> {
-        return document.select(genreSiteMangasHTMLSelector).map { getMangaFromList(it) }
+        return document.select(MLConstants.genreSiteMangasHTMLSelector).map { getMangaFromList(it) }
     }
 
     /**
@@ -168,9 +131,9 @@ class ManhwaLatinoSiteParser(
      */
     fun getMangaFromList(element: Element): SManga {
         val manga = SManga.create()
-        manga.url = getUrlWithoutDomain(element.select(popularGenreUrlHTMLSelector).attr("abs:href"))
-        manga.title = element.select(popularGenreTitleHTMLSelector).text().trim()
-        manga.thumbnail_url = element.select(popularGenreThumbnailUrlMangaHTMLSelector).attr("abs:data-src")
+        manga.url = getUrlWithoutDomain(element.select(MLConstants.popularGenreUrlHTMLSelector).attr("abs:href"))
+        manga.title = element.select(MLConstants.popularGenreTitleHTMLSelector).text().trim()
+        manga.thumbnail_url = element.select(MLConstants.popularGenreThumbnailUrlMangaHTMLSelector).attr("abs:data-src")
         return manga
     }
 
@@ -184,22 +147,22 @@ class ManhwaLatinoSiteParser(
 
         val titleElements = document.select("#manga-title h1")
         val mangaType = getMangaBadges(titleElements)
-        val descriptionList = document.select(mangaDetailsDescriptionHTMLSelector).map { it.text() }
-        val author = document.select(mangaDetailsAuthorHTMLSelector).text()
-        val artist = document.select(mangaDetailsArtistHTMLSelector).text()
+        val descriptionList = document.select(MLConstants.mangaDetailsDescriptionHTMLSelector).map { it.text() }
+        val author = document.select(MLConstants.mangaDetailsAuthorHTMLSelector).text()
+        val artist = document.select(MLConstants.mangaDetailsArtistHTMLSelector).text()
 
-        val genrelist = document.select(mangaDetailsGenreHTMLSelector).map { it.text() }
-        val tagList = document.select(mangaDetailsTagsHTMLSelector).map { it.text() }
+        val genrelist = document.select(MLConstants.mangaDetailsGenreHTMLSelector).map { it.text() }
+        val tagList = document.select(MLConstants.mangaDetailsTagsHTMLSelector).map { it.text() }
         val genreTagList = genrelist + tagList
 
         manga.title = titleElements.last().ownText().trim()
         manga.thumbnail_url =
-            document.select(mangaDetailsThumbnailUrlHTMLSelector).attr("abs:data-src")
+            document.select(MLConstants.mangaDetailsThumbnailUrlHTMLSelector).attr("abs:data-src")
         manga.description = descriptionList.joinToString("\n")
         manga.author = if (author.isBlank()) "Autor Desconocido" else author
         manga.artist = artist
         manga.genre = genreTagList.joinToString(", ")
-        manga.status = findMangaStatus(tagList, document.select(mangaDetailsAttributes))
+        manga.status = findMangaStatus(tagList, document.select(MLConstants.mangaDetailsAttributes))
         return manga
     }
 
@@ -245,9 +208,9 @@ class ManhwaLatinoSiteParser(
      * @param response the response from the site.
      */
     fun getChapterListParse(response: Response): List<SChapter> {
-        return response.asJsoup().select(chapterListParseSelector).map { element ->
+        return response.asJsoup().select(MLConstants.chapterListParseSelector).map { element ->
             // Link to the Chapter with the info (address and chapter title)
-            val chapterInfo = element.select(chapterLinkParser)
+            val chapterInfo = element.select(MLConstants.chapterLinkParser)
             // Chaptername
             val chapterName = chapterInfo.text().trim()
             // release date came as text with format dd/mm/yyyy from a link or <i>dd/mm/yyyy</i>
@@ -271,8 +234,8 @@ class ManhwaLatinoSiteParser(
      * Get The String with the information about the Release date of the Chapter
      */
     private fun getChapterReleaseDate(element: Element): String {
-        val chapterReleaseDateLink = element.select(chapterReleaseDateLinkParser).attr("title")
-        val chapterReleaseDateI = element.select(chapterReleaseDateIParser).text()
+        val chapterReleaseDateLink = element.select(MLConstants.chapterReleaseDateLinkParser).attr("title")
+        val chapterReleaseDateI = element.select(MLConstants.chapterReleaseDateIParser).text()
         return when {
             chapterReleaseDateLink.isNotEmpty() -> chapterReleaseDateLink
             chapterReleaseDateI.isNotEmpty() -> chapterReleaseDateI
@@ -329,7 +292,7 @@ class ManhwaLatinoSiteParser(
      */
     fun getPageListParse(response: Response): List<Page> {
         val list =
-            response.asJsoup().select(pageListParseSelector).mapIndexed { index, imgElement ->
+            response.asJsoup().select(MLConstants.pageListParseSelector).mapIndexed { index, imgElement ->
                 Page(index, "", imgElement.attr("abs:data-src"))
             }
         return list
@@ -384,7 +347,7 @@ class ManhwaLatinoSiteParser(
      * Check if there ir another page to show
      */
     private fun hasNextPages(document: Document): Boolean {
-        return !document.select(searchMangaNextPageSelector).isEmpty()
+        return !document.select(MLConstants.searchMangaNextPageSelector).isEmpty()
     }
 
     /**

@@ -31,18 +31,9 @@ class ManhwaLatino : ParsedHttpSource() {
     override val baseUrl = "https://manhwa-latino.com"
 
     /**
-     * User Agent for Android for this Website
-     */
-//    private val userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36"
-
-    /**
      * Header for Request
      */
-    override fun headersBuilder(): Headers.Builder {
-        return Headers.Builder()
-//            .add("User-Agent", userAgent)
-            .add("Referer", "$baseUrl")
-    }
+    override fun headersBuilder() = Headers.Builder().add("Referer", "$baseUrl")
 
     /**
      * Http Client
@@ -68,21 +59,21 @@ class ManhwaLatino : ParsedHttpSource() {
      * Returns the Jsoup selector that returns a list of [Element] corresponding to each manga.
      */
     override fun popularMangaSelector(): String {
-        return manhwaLatinoSiteParser.popularMangaSelector
+        return MLConstants.popularMangaSelector
     }
 
     /**
      * Returns the Jsoup selector that returns a list of [Element] corresponding to each manga.
      */
     override fun latestUpdatesSelector(): String {
-        return manhwaLatinoSiteParser.latestUpdatesSelector
+        return MLConstants.latestUpdatesSelector
     }
 
     /**
      * Returns the Jsoup selector that returns a list of [Element] corresponding to each manga.
      */
     override fun searchMangaSelector(): String {
-        return manhwaLatinoSiteParser.searchMangaSelector
+        return MLConstants.searchMangaSelector
     }
 
     /**
@@ -96,7 +87,7 @@ class ManhwaLatino : ParsedHttpSource() {
      * there's no next page.
      */
     override fun popularMangaNextPageSelector(): String {
-        return manhwaLatinoSiteParser.popularMangaNextPageSelector
+        return MLConstants.popularMangaNextPageSelector
     }
 
     /**
@@ -104,7 +95,7 @@ class ManhwaLatino : ParsedHttpSource() {
      * there's no next page.
      */
     override fun latestUpdatesNextPageSelector(): String {
-        return manhwaLatinoSiteParser.latestUpdatesNextPageSelector
+        return MLConstants.latestUpdatesNextPageSelector
     }
 
     /**
@@ -112,7 +103,7 @@ class ManhwaLatino : ParsedHttpSource() {
      * there's no next page.
      */
     override fun searchMangaNextPageSelector(): String {
-        return manhwaLatinoSiteParser.searchMangaNextPageSelector
+        return MLConstants.searchMangaNextPageSelector
     }
 
     /**
@@ -179,13 +170,13 @@ class ManhwaLatino : ParsedHttpSource() {
         return manhwaLatinoSiteParser.searchMangaParse(response)
     }
 
-//    /**
-//     * Returns the request for the details of a manga. Override only if it's needed to change the
-//     * url, send different headers or request method like POST.
-//     *
-//     * @param manga the manga to be updated.
-//     */
-//    override fun mangaDetailsRequest(manga: SManga) = GET(baseUrl + manga.url, headers)
+    /**
+     * Returns the request for the details of a manga. Override only if it's needed to change the
+     * url, send different headers or request method like POST.
+     *
+     * @param manga the manga to be updated.
+     */
+    override fun mangaDetailsRequest(manga: SManga) = GET(baseUrl + manga.url, headers)
 
     /**
      * Returns the request for updating the chapter list. Override only if it's needed to override
