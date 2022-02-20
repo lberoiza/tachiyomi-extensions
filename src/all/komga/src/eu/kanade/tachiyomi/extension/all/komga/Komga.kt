@@ -213,7 +213,7 @@ open class Komga(suffix: String = "") : ConfigurableSource, HttpSource() {
         val r = page.mapIndexed { index, book ->
             SChapter.create().apply {
                 chapter_number = if (!response.fromReadList()) book.metadata.numberSort else index + 1F
-                name = "${if (!response.fromReadList()) "${book.metadata.number} - " else ""}${book.metadata.title} (${book.size})"
+                name = "${if (!response.fromReadList()) "${book.metadata.number} - " else "${book.seriesTitle} ${book.metadata.number}: "}${book.metadata.title} (${book.size})"
                 url = "$baseUrl/api/v1/books/${book.id}"
                 scanlator = book.metadata.authors.groupBy({ it.role }, { it.name })["translator"]?.joinToString()
                 date_upload = book.metadata.releaseDate?.let { parseDate(it) }
@@ -590,7 +590,7 @@ open class Komga(suffix: String = "") : ConfigurableSource, HttpSource() {
         private const val PASSWORD_TITLE = "Password"
         private const val PASSWORD_DEFAULT = ""
 
-        private val supportedImageTypes = listOf("image/jpeg", "image/png", "image/gif", "image/webp")
+        private val supportedImageTypes = listOf("image/jpeg", "image/png", "image/gif", "image/webp", "image/jxl")
 
         private const val TYPE_SERIES = "Series"
         private const val TYPE_READLISTS = "Read lists"

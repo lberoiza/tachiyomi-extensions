@@ -177,7 +177,7 @@ class Readmanga : ConfigurableSource, ParsedHttpSource() {
         if (infoElement.select(".another-names").isNotEmpty()) {
             altName = "Альтернативные названия:\n" + infoElement.select(".another-names").text() + "\n\n"
         }
-        manga.description = ratingStar + " " + ratingValue + "[ⓘ" + ratingValueOver + "]" + " (голосов: " + ratingVotes + ")\n" + altName + document.select("div.manga-description").text()
+        manga.description = ratingStar + " " + ratingValue + "[ⓘ" + ratingValueOver + "]" + " (голосов: " + ratingVotes + ")\n" + altName + document.select("div#tab-description  .manga-description").text()
         manga.status = parseStatus(infoElement.html())
         manga.thumbnail_url = infoElement.select("img").attr("data-full")
         return manga
@@ -185,8 +185,8 @@ class Readmanga : ConfigurableSource, ParsedHttpSource() {
 
     private fun parseStatus(element: String): Int = when {
         element.contains("Запрещена публикация произведения по копирайту") || element.contains("ЗАПРЕЩЕНА К ПУБЛИКАЦИИ НА ТЕРРИТОРИИ РФ!") -> SManga.LICENSED
-        element.contains("<b>Сингл</b>") || element.contains("<b>Перевод:</b> завершен") -> SManga.COMPLETED
         element.contains("<b>Перевод:</b> продолжается") -> SManga.ONGOING
+        element.contains("<b>Сингл</b>") || element.contains("<b>Перевод:</b> завер") -> SManga.COMPLETED
         else -> SManga.UNKNOWN
     }
 

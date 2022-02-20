@@ -66,7 +66,6 @@ class LibHentai : ConfigurableSource, HttpSource() {
     override val baseUrl = "https://hentailib.me"
 
     override fun headersBuilder() = Headers.Builder().apply {
-        add("User-Agent", "Mozilla/5.0 (Windows NT 6.3; WOW64)")
         add("Accept", "image/webp,*/*;q=0.8")
         add("Referer", baseUrl)
     }
@@ -91,7 +90,7 @@ class LibHentai : ConfigurableSource, HttpSource() {
 
         element.select("a").first().let { link ->
             manga.setUrlWithoutDomain(link.attr("href"))
-            manga.title = if (titleLanguage.equals("rus") || element.select(".updates__name_rus").isNullOrEmpty()) { element.select("h4").first().text() } else element.select(".updates__name_rus").first().text()
+            manga.title = if (isEng.equals("rus") || element.select(".updates__name_rus").isNullOrEmpty()) { element.select("h4").first().text() } else element.select(".updates__name_rus").first().text()
         }
         return manga
     }
@@ -146,7 +145,7 @@ class LibHentai : ConfigurableSource, HttpSource() {
     private fun popularMangaFromElement(el: JsonElement) = SManga.create().apply {
         val slug = el.jsonObject["slug"]!!.jsonPrimitive.content
         val cover = el.jsonObject["cover"]!!.jsonPrimitive.content
-        title = if (titleLanguage.equals("rus")) el.jsonObject["rus_name"]!!.jsonPrimitive.content else el.jsonObject["name"]!!.jsonPrimitive.content
+        title = if (isEng.equals("rus")) el.jsonObject["rus_name"]!!.jsonPrimitive.content else el.jsonObject["name"]!!.jsonPrimitive.content
         thumbnail_url = "$COVER_URL/huploads/cover/$slug/cover/${cover}_250x350.jpg"
         url = "/$slug"
     }
@@ -187,7 +186,7 @@ class LibHentai : ConfigurableSource, HttpSource() {
             else -> "☆☆☆☆☆"
         }
         val genres = document.select(".media-tags > a").map { it.text().capitalize() }
-        manga.title = if (titleLanguage.equals("rus")) document.select(".media-name__main").text() else document.select(".media-name__alt").text()
+        manga.title = if (isEng.equals("rus")) document.select(".media-name__main").text() else document.select(".media-name__alt").text()
         manga.thumbnail_url = document.select(".media-sidebar__cover > img").attr("src")
         manga.author = body.select("div.media-info-list__title:contains(Автор) + div").text()
         manga.artist = body.select("div.media-info-list__title:contains(Художник) + div").text()
@@ -205,13 +204,13 @@ class LibHentai : ConfigurableSource, HttpSource() {
                 "завершен" -> SManga.COMPLETED
                 else -> SManga.UNKNOWN
             }
-        manga.genre = genres.plusElement(category).plusElement(rawAgeStop).joinToString { it.trim() }
+        manga.genre = category + ", " + rawAgeStop + ", " + genres.joinToString { it.trim() }
         val altSelector = document.select(".media-info-list__item_alt-names .media-info-list__value div")
         var altName = ""
         if (altSelector.isNotEmpty()) {
             altName = "Альтернативные названия:\n" + altSelector.map { it.text() }.joinToString(" / ") + "\n\n"
         }
-        val mediaNameLanguage = if (titleLanguage.equals("rus")) document.select(".media-name__alt").text() else document.select(".media-name__main").text()
+        val mediaNameLanguage = if (isEng.equals("rus")) document.select(".media-name__alt").text() else document.select(".media-name__main").text()
         manga.description = mediaNameLanguage + "\n" + ratingStar + " " + ratingValue + " (голосов: " + ratingVotes + ")\n" + altName + document.select(".media-description__text").text()
         return manga
     }
@@ -492,6 +491,11 @@ class LibHentai : ConfigurableSource, HttpSource() {
                         url.addQueryParameter(if (tag.isIncluded()) "tags[include][]" else "tags[exclude][]", tag.id)
                     }
                 }
+                is MyList -> filter.state.forEach { favorite ->
+                    if (favorite.state != Filter.TriState.STATE_IGNORE) {
+                        url.addQueryParameter(if (favorite.isIncluded()) "bookmarks[include][]" else "bookmarks[exclude][]", favorite.id)
+                    }
+                }
             }
         }
         return POST(url.toString(), catalogHeaders())
@@ -541,7 +545,7 @@ class LibHentai : ConfigurableSource, HttpSource() {
     private class StatusTitleList(titles: List<CheckFilter>) : Filter.Group<CheckFilter>("Статус тайтла", titles)
     private class GenreList(genres: List<SearchFilter>) : Filter.Group<SearchFilter>("Жанры", genres)
     private class TagList(tags: List<SearchFilter>) : Filter.Group<SearchFilter>("Теги", tags)
-    private class AgeList(ages: List<CheckFilter>) : Filter.Group<CheckFilter>("Возрастное ограничение", ages)
+    private class MyList(favorites: List<SearchFilter>) : Filter.Group<SearchFilter>("Мои списки", favorites)
 
     override fun getFilterList() = FilterList(
         OrderBy(),
@@ -550,7 +554,8 @@ class LibHentai : ConfigurableSource, HttpSource() {
         GenreList(getGenreList()),
         TagList(getTagList()),
         StatusList(getStatusList()),
-        StatusTitleList(getStatusTitleList())
+        StatusTitleList(getStatusTitleList()),
+        MyList(getMyList())
     )
 
     private class OrderBy : Filter.Sort(
@@ -823,6 +828,13 @@ class LibHentai : ConfigurableSource, HttpSource() {
         SearchFilter("Яндэрэ", "146")
     )
 
+    private fun getMyList() = listOf(
+        SearchFilter("Читаю", "1"),
+        SearchFilter("В планах", "2"),
+        SearchFilter("Брошено", "3"),
+        SearchFilter("Прочитано", "4"),
+        SearchFilter("Любимые", "5")
+    )
     companion object {
         const val PREFIX_SLUG_SEARCH = "slug:"
         private const val SERVER_PREF = "MangaLibImageServer"
@@ -838,7 +850,7 @@ class LibHentai : ConfigurableSource, HttpSource() {
     }
 
     private var server: String? = preferences.getString(SERVER_PREF, null)
-    private var titleLanguage: String? = preferences.getString(LANGUAGE_PREF, null)
+    private var isEng: String? = preferences.getString(LANGUAGE_PREF, "eng")
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         val serverPref = ListPreference(screen.context).apply {
             key = SERVER_PREF
@@ -876,10 +888,10 @@ class LibHentai : ConfigurableSource, HttpSource() {
             summary = "%s"
             setDefaultValue("eng")
             setOnPreferenceChangeListener { _, newValue ->
-                titleLanguage = newValue.toString()
+                val titleLanguage = preferences.edit().putString(LANGUAGE_PREF, newValue as String).commit()
                 val warning = "Если язык обложки не изменился очистите базу данных в приложении (Настройки -> Дополнительно -> Очистить базу данных)"
                 Toast.makeText(screen.context, warning, Toast.LENGTH_LONG).show()
-                true
+                titleLanguage
             }
         }
         screen.addPreference(serverPref)
