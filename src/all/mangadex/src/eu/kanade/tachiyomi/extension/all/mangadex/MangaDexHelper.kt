@@ -61,21 +61,16 @@ class MangaDexHelper() {
     fun getLatestChapterOffset(page: Int): String = (MDConstants.latestChapterLimit * (page - 1)).toString()
 
     /**
-     * Remove bbcode tags as well as parses any html characters in description or
+     * Remove markdown links as well as parse any html characters in description or
      * chapter name to actual characters for example &hearts; will show ♥
      */
     fun cleanString(string: String): String {
-        val bbRegex =
-            """\[(\w+)[^]]*](.*?)\[/\1]""".toRegex()
-        var intermediate = string
-            .replace("[list]", "")
-            .replace("[/list]", "")
-            .replace("[*]", "")
-        // Recursively remove nested bbcode
-        while (bbRegex.containsMatchIn(intermediate)) {
-            intermediate = intermediate.replace(bbRegex, "$2")
-        }
-        return Parser.unescapeEntities(intermediate, false)
+        val unescapedString = Parser.unescapeEntities(string, false)
+
+        return unescapedString
+            .substringBefore("---")
+            .replace(markdownLinksRegex, "$1")
+            .trim()
     }
 
     /**
@@ -112,6 +107,12 @@ class MangaDexHelper() {
         val USE_CACHE = CacheControl.Builder()
             .maxStale(Integer.MAX_VALUE, TimeUnit.SECONDS)
             .build()
+
+        val markdownLinksRegex = "\\[([^]]+)\\]\\(([^)]+)\\)".toRegex()
+
+        val titleSpecialCharactersRegex = "[^a-z0-9]+".toRegex()
+
+        val trailingHyphenRegex = "-+$".toRegex()
     }
 
     // Check the token map to see if the md@home host is still valid
@@ -142,17 +143,14 @@ class MangaDexHelper() {
     /**
      * get the md@home url
      */
-    fun getMdAtHomeUrl(
+    private fun getMdAtHomeUrl(
         tokenRequestUrl: String,
         client: OkHttpClient,
         headers: Headers,
         cacheControl: CacheControl,
     ): String {
-        if (cacheControl == CacheControl.FORCE_NETWORK) {
-            tokenTracker[tokenRequestUrl] = Date().time
-        }
         val response =
-            client.newCall(GET(tokenRequestUrl, headers, cacheControl)).execute()
+            client.newCall(mdAtHomeRequest(tokenRequestUrl, headers, cacheControl)).execute()
 
         // This check is for the error that causes pages to fail to load.
         // It should never be entered, but in case it is, we retry the request.
@@ -162,6 +160,21 @@ class MangaDexHelper() {
         }
 
         return json.decodeFromString<AtHomeDto>(response.body!!.string()).baseUrl
+    }
+
+    /**
+     * create an md at home Request
+     */
+    fun mdAtHomeRequest(
+        tokenRequestUrl: String,
+        headers: Headers,
+        cacheControl: CacheControl
+    ): Request {
+        if (cacheControl == CacheControl.FORCE_NETWORK) {
+            tokenTracker[tokenRequestUrl] = Date().time
+        }
+
+        return GET(tokenRequestUrl, headers, cacheControl)
     }
 
     /**
@@ -178,6 +191,7 @@ class MangaDexHelper() {
             val titleMap = mangaDataDto.attributes.title.asMdMap()
             val dirtyTitle = titleMap[lang]
                 ?: titleMap["en"]
+                ?: titleMap["ja-ro"]
                 ?: mangaDataDto.attributes.altTitles.jsonArray
                     .find {
                         val altTitle = it.asMdMap()
@@ -314,7 +328,7 @@ class MangaDexHelper() {
                 }
             }
 
-            if (attr.externalUrl != null && attr.data.isEmpty()) {
+            if (attr.externalUrl != null && attr.pages == 0) {
                 return null
             }
 
@@ -336,4 +350,18 @@ class MangaDexHelper() {
             throw(e)
         }
     }
+
+    fun titleToSlug(title: String) = title.trim()
+        .toLowerCase(Locale.US)
+        .replace(titleSpecialCharactersRegex, "-")
+        .replace(trailingHyphenRegex, "")
+        .split("-")
+        .reduce { accumulator, element ->
+            val currentSlug = "$accumulator-$element"
+            if (currentSlug.length > 100) {
+                accumulator
+            } else {
+                currentSlug
+            }
+        }
 }

@@ -3,11 +3,13 @@ package eu.kanade.tachiyomi.extension.all.mangadex
 import android.app.Application
 import android.content.SharedPreferences
 import android.util.Log
+import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
 import eu.kanade.tachiyomi.extension.all.mangadex.dto.AggregateDto
+import eu.kanade.tachiyomi.extension.all.mangadex.dto.AtHomeDto
 import eu.kanade.tachiyomi.extension.all.mangadex.dto.ChapterDto
 import eu.kanade.tachiyomi.extension.all.mangadex.dto.ChapterListDto
 import eu.kanade.tachiyomi.extension.all.mangadex.dto.MangaDto
@@ -172,6 +174,16 @@ abstract class MangaDex(override val lang: String, val dexLang: String) :
                 MDConstants.getContentRatingPrefKey(dexLang),
                 MDConstants.contentRatingPrefDefaults
             )?.forEach { addQueryParameter("contentRating[]", it) }
+            MDConstants.defaultBlockedGroups.forEach {
+                addQueryParameter("excludedGroups[]", it)
+            }
+            preferences.getString(
+                MDConstants.getBlockedGroupsPrefKey(dexLang), ""
+            )?.split(",")?.sorted()?.forEach { if (it.isNotEmpty()) addQueryParameter("excludedGroups[]", it.trim()) }
+            preferences.getString(
+                MDConstants.getBlockedUploaderPrefKey(dexLang),
+                ""
+            )?.split(", ")?.sorted()?.forEach { if (it.isNotEmpty()) addQueryParameter("excludedUploaders[]", it.trim()) }
         }.build().toString()
         return GET(url, headers, CacheControl.FORCE_NETWORK)
     }
@@ -231,8 +243,7 @@ abstract class MangaDex(override val lang: String, val dexLang: String) :
             tempUrl.apply {
                 addQueryParameter("group", groupID)
             }
-        }
-        else {
+        } else {
             tempUrl.apply {
                 val actualQuery = query.replace(MDConstants.whitespaceRegex, " ")
                 if (actualQuery.isNotBlank()) {
@@ -241,7 +252,7 @@ abstract class MangaDex(override val lang: String, val dexLang: String) :
             }
         }
 
-        val finalUrl = helper.mdFilters.addFiltersToUrl(tempUrl, filters)
+        val finalUrl = helper.mdFilters.addFiltersToUrl(tempUrl, filters, dexLang)
 
         return GET(finalUrl, headers, CacheControl.FORCE_NETWORK)
     }
@@ -261,7 +272,10 @@ abstract class MangaDex(override val lang: String, val dexLang: String) :
 
     override fun mangaDetailsRequest(manga: SManga): Request {
         // remove once redirect for /manga is fixed
-        return GET("${baseUrl}${manga.url.replace("manga", "title")}", headers)
+        val title = manga.title
+        val url = "${baseUrl}${manga.url.replace("manga", "title")}"
+        val shareUrl = "$url/" + helper.titleToSlug(title)
+        return GET(shareUrl, headers)
     }
 
     /**
@@ -325,6 +339,13 @@ abstract class MangaDex(override val lang: String, val dexLang: String) :
             addQueryParameter("contentRating[]", "suggestive")
             addQueryParameter("contentRating[]", "erotica")
             addQueryParameter("contentRating[]", "pornographic")
+            preferences.getString(
+                MDConstants.getBlockedGroupsPrefKey(dexLang), ""
+            )?.split(",")?.sorted()?.forEach { if (it.isNotEmpty()) addQueryParameter("excludedGroups[]", it.trim()) }
+            preferences.getString(
+                MDConstants.getBlockedUploaderPrefKey(dexLang),
+                ""
+            )?.split(",")?.sorted()?.forEach { if (it.isNotEmpty()) addQueryParameter("excludedUploaders[]", it.trim()) }
         }.build().toString()
         return GET(url, headers = headers, cache = CacheControl.FORCE_NETWORK)
     }
@@ -375,40 +396,33 @@ abstract class MangaDex(override val lang: String, val dexLang: String) :
         if (!helper.containsUuid(chapter.url)) {
             throw Exception("Migrate this manga from MangaDex to MangaDex to update it")
         }
-        return GET(MDConstants.apiUrl + chapter.url, headers, CacheControl.FORCE_NETWORK)
+        val chapterId = chapter.url.substringAfter("/chapter/")
+        val usingStandardHTTPS =
+            preferences.getBoolean(MDConstants.getStandardHttpsPreferenceKey(dexLang), false)
+        val atHomeRequestUrl = if (usingStandardHTTPS) {
+            "${MDConstants.apiUrl}/at-home/server/$chapterId?forcePort443=true"
+        } else {
+            "${MDConstants.apiUrl}/at-home/server/$chapterId"
+        }
+
+        return helper.mdAtHomeRequest(atHomeRequestUrl, headers, CacheControl.FORCE_NETWORK)
     }
 
     override fun pageListParse(response: Response): List<Page> {
-        if (response.isSuccessful.not()) {
-            throw Exception("HTTP ${response.code}")
-        }
-        if (response.code == 204) {
-            return emptyList()
-        }
-        val chapterDto = helper.json.decodeFromString<ChapterDto>(response.body!!.string()).data
-        val usingStandardHTTPS =
-            preferences.getBoolean(MDConstants.getStandardHttpsPreferenceKey(dexLang), false)
-
-        val atHomeRequestUrl = if (usingStandardHTTPS) {
-            "${MDConstants.apiUrl}/at-home/server/${chapterDto.id}?forcePort443=true"
-        } else {
-            "${MDConstants.apiUrl}/at-home/server/${chapterDto.id}"
-        }
-
-        val host =
-            helper.getMdAtHomeUrl(atHomeRequestUrl, client, headers, CacheControl.FORCE_NETWORK)
-
+        val atHomeRequestUrl = response.request.url
+        val atHomeDto = helper.json.decodeFromString<AtHomeDto>(response.body!!.string())
+        val host = atHomeDto.baseUrl
         val usingDataSaver =
             preferences.getBoolean(MDConstants.getDataSaverPreferenceKey(dexLang), false)
 
         // have to add the time, and url to the page because pages timeout within 30mins now
         val now = Date().time
 
-        val hash = chapterDto.attributes.hash
+        val hash = atHomeDto.chapter.hash
         val pageSuffix = if (usingDataSaver) {
-            chapterDto.attributes.dataSaver.map { "/data-saver/$hash/$it" }
+            atHomeDto.chapter.dataSaver.map { "/data-saver/$hash/$it" }
         } else {
-            chapterDto.attributes.data.map { "/data/$hash/$it" }
+            atHomeDto.chapter.data.map { "/data/$hash/$it" }
         }
 
         return pageSuffix.mapIndexed { index, imgUrl ->
@@ -508,11 +522,49 @@ abstract class MangaDex(override val lang: String, val dexLang: String) :
             }
         }
 
+        val blockedGroupsPref = EditTextPreference(screen.context).apply {
+            key = MDConstants.getBlockedGroupsPrefKey(dexLang)
+            title = "Block Groups by UUID"
+            summary = "Chapters from blocked groups will not show up in Latest or Manga feed.\n" +
+                "Enter as a Comma-separated list of group UUIDs"
+            setOnPreferenceChangeListener { _, newValue ->
+                val groupsBlocked = newValue.toString()
+                    .split(",")
+                    .map { it.trim() }
+                    .filter { helper.containsUuid(it) }
+                    .joinToString(separator = ", ")
+
+                preferences.edit()
+                    .putString(MDConstants.getBlockedGroupsPrefKey(dexLang), groupsBlocked)
+                    .commit()
+            }
+        }
+
+        val blockedUploaderPref = EditTextPreference(screen.context).apply {
+            key = MDConstants.getBlockedUploaderPrefKey(dexLang)
+            title = "Block Uploader by UUID"
+            summary = "Chapters from blocked users will not show up in Latest or Manga feed.\n" +
+                "Enter as a Comma-separated list of uploader UUIDs"
+            setOnPreferenceChangeListener { _, newValue ->
+                val uploaderBlocked = newValue.toString()
+                    .split(",")
+                    .map { it.trim() }
+                    .filter { helper.containsUuid(it) }
+                    .joinToString(separator = ", ")
+
+                preferences.edit()
+                    .putString(MDConstants.getBlockedUploaderPrefKey(dexLang), uploaderBlocked)
+                    .commit()
+            }
+        }
+
         screen.addPreference(coverQualityPref)
         screen.addPreference(dataSaverPref)
         screen.addPreference(standardHttpsPortPref)
         screen.addPreference(contentRatingPref)
         screen.addPreference(originalLanguagePref)
+        screen.addPreference(blockedGroupsPref)
+        screen.addPreference(blockedUploaderPref)
     }
 
     override fun getFilterList(): FilterList =

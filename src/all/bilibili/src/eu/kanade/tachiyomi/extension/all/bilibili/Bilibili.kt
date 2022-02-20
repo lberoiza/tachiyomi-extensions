@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.extension.all.bilibili
 
 import android.app.Application
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.lib.ratelimit.SpecificHostRateLimitInterceptor
@@ -18,10 +17,10 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import okhttp3.Headers
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -40,7 +39,7 @@ import java.util.Locale
 abstract class Bilibili(
     override val name: String,
     final override val baseUrl: String,
-    override val lang: String
+    final override val lang: String
 ) : HttpSource(), ConfigurableSource {
 
     override val supportsLatest = true
@@ -57,38 +56,81 @@ abstract class Bilibili(
         .add("Origin", baseUrl)
         .add("Referer", "$baseUrl/")
 
-    protected open val statusLabel: String = "Status"
+    private val apiLang: String = when (lang) {
+        "zh-Hans" -> "cn"
+        else -> lang
+    }
 
-    protected open val sortLabel: String = "Sort by"
+    protected open val statusLabel: String = when (lang) {
+        "zh", "zh-Hans" -> "进度"
+        else -> "Status"
+    }
 
-    protected open val genreLabel: String = "Genre"
+    protected open val sortLabel: String = when (lang) {
+        "zh", "zh-Hans" -> "排序"
+        "id" -> "Urutkan dengan"
+        else -> "Sort by"
+    }
 
-    protected open val areaLabel: String = "Area"
+    protected open val genreLabel: String = when (lang) {
+        "zh", "zh-Hans" -> "题材"
+        else -> "Genre"
+    }
 
-    protected open val priceLabel: String = "Price"
+    protected open val areaLabel: String = when (lang) {
+        "zh", "zh-Hans" -> "地区"
+        else -> "Area"
+    }
 
-    protected open val episodePrefix: String = "Ep. "
+    protected open val priceLabel: String = when (lang) {
+        "zh", "zh-Hans" -> "收费"
+        "id" -> "Harga"
+        else -> "Price"
+    }
+
+    protected open val episodePrefix: String = when (lang) {
+        "zh", "zh-Hans" -> ""
+        else -> "Ep. "
+    }
 
     protected open val defaultPopularSort: Int = 1
 
     protected open val defaultLatestSort: Int = 2
 
-    protected open val hasPaidChaptersWarning: String = "This series has paid chapters that " +
-        "were filtered out from the chapter list. Use the BILIBILI website or the official app " +
-        "to read them for now."
+    protected open val hasPaidChaptersWarning: String = when (lang) {
+        "zh", "zh-Hans" -> "此漫画的付费章节已从章节列表中过滤，暂时请用网页端或官方app阅读。"
+        else ->
+            "This series has paid chapters that were filtered out from the chapter list. " +
+                "Use the BILIBILI website or the official app to read them for now."
+    }
 
-    protected open val resolutionPrefTitle: String = "Chapter image resolution"
+    protected open val imageQualityPrefTitle: String = when (lang) {
+        "zh", "zh-Hans" -> "章节图片质量"
+        "id" -> "Kualitas gambar"
+        else -> "Chapter image quality"
+    }
 
-    protected open val imagePrefTitle: String = "Chapter image format"
+    protected open val imageQualityPrefEntries: Array<String> = when (lang) {
+        "zh", "zh-Hans" -> arrayOf("原图", "高", "低")
+        else -> arrayOf("Raw", "HD", "SD")
+    }
+
+    protected open val imageFormatPrefTitle: String = when (lang) {
+        "zh", "zh-Hans" -> "章节图片格式"
+        "id" -> "Format gambar"
+        else -> "Chapter image format"
+    }
 
     private val preferences: SharedPreferences by lazy {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
     }
 
-    private val json: Json by injectLazy()
+    protected val json: Json by injectLazy()
 
-    private val chapterImageResolution: String
-        get() = preferences.getString("${RESOLUTION_PREF_KEY}_$lang", RESOLUTION_PREF_DEFAULT_VALUE)!!
+    protected open val signedIn: Boolean = false
+
+    private val chapterImageQuality: String
+        get() = preferences.getString("${IMAGE_QUALITY_PREF_KEY}_$lang", IMAGE_QUALITY_PREF_DEFAULT_VALUE)!!
 
     private val chapterImageFormat: String
         get() = preferences.getString("${IMAGE_FORMAT_PREF_KEY}_$lang", IMAGE_FORMAT_PREF_DEFAULT_VALUE)!!
@@ -106,16 +148,12 @@ abstract class Bilibili(
         }
         val requestBody = requestPayload.toString().toRequestBody(JSON_MEDIA_TYPE)
 
-        val newHeaders = headersBuilder()
-            .add("Content-Length", requestBody.contentLength().toString())
-            .add("Content-Type", requestBody.contentType().toString())
-            .build()
+        val apiUrl = "$baseUrl/$BASE_API_COMIC_ENDPOINT/ClassPage".toHttpUrl()
+            .newBuilder()
+            .addCommonParameters()
+            .toString()
 
-        return POST(
-            "$baseUrl/$BASE_API_ENDPOINT/ClassPage?device=pc&platform=web",
-            headers = newHeaders,
-            body = requestBody
-        )
+        return POST(apiUrl, headers, requestBody)
     }
 
     override fun popularMangaParse(response: Response): MangasPage {
@@ -150,16 +188,12 @@ abstract class Bilibili(
         }
         val requestBody = requestPayload.toString().toRequestBody(JSON_MEDIA_TYPE)
 
-        val newHeaders = headersBuilder()
-            .add("Content-Length", requestBody.contentLength().toString())
-            .add("Content-Type", requestBody.contentType().toString())
-            .build()
+        val apiUrl = "$baseUrl/$BASE_API_COMIC_ENDPOINT/ClassPage".toHttpUrl()
+            .newBuilder()
+            .addCommonParameters()
+            .toString()
 
-        return POST(
-            "$baseUrl/$BASE_API_ENDPOINT/ClassPage?device=pc&platform=web",
-            headers = newHeaders,
-            body = requestBody
-        )
+        return POST(apiUrl, headers, requestBody)
     }
 
     override fun latestUpdatesParse(response: Response): MangasPage {
@@ -222,25 +256,22 @@ abstract class Bilibili(
             }
         }
         val requestBody = jsonPayload.toString().toRequestBody(JSON_MEDIA_TYPE)
-        Log.d("Bilibili", jsonPayload.toString())
 
         val refererUrl = if (query.isBlank()) "$baseUrl/genre" else
             "$baseUrl/search".toHttpUrl().newBuilder()
                 .addQueryParameter("keyword", query)
                 .toString()
+
         val newHeaders = headersBuilder()
-            .add("Content-Length", requestBody.contentLength().toString())
-            .add("Content-Type", requestBody.contentType().toString())
             .set("Referer", refererUrl)
             .build()
 
-        val apiPath = if (query.isBlank()) "ClassPage" else "Search"
+        val apiUrl = "$baseUrl/$BASE_API_COMIC_ENDPOINT/".toHttpUrl().newBuilder()
+            .addPathSegment(if (query.isBlank()) "ClassPage" else "Search")
+            .addCommonParameters()
+            .toString()
 
-        return POST(
-            "$baseUrl/$BASE_API_ENDPOINT/$apiPath?device=pc&platform=web",
-            headers = newHeaders,
-            body = requestBody
-        )
+        return POST(apiUrl, newHeaders, requestBody)
     }
 
     override fun searchMangaParse(response: Response): MangasPage {
@@ -298,16 +329,15 @@ abstract class Bilibili(
         val requestBody = jsonPayload.toString().toRequestBody(JSON_MEDIA_TYPE)
 
         val newHeaders = headersBuilder()
-            .add("Content-Length", requestBody.contentLength().toString())
-            .add("Content-Type", requestBody.contentType().toString())
             .set("Referer", baseUrl + mangaUrl)
             .build()
 
-        return POST(
-            "$baseUrl/$BASE_API_ENDPOINT/ComicDetail?device=pc&platform=web",
-            headers = newHeaders,
-            body = requestBody
-        )
+        val apiUrl = "$baseUrl/$BASE_API_COMIC_ENDPOINT/ComicDetail".toHttpUrl()
+            .newBuilder()
+            .addCommonParameters()
+            .toString()
+
+        return POST(apiUrl, newHeaders, requestBody)
     }
 
     override fun mangaDetailsParse(response: Response): SManga = SManga.create().apply {
@@ -322,7 +352,7 @@ abstract class Bilibili(
         thumbnail_url = comic.verticalCover + THUMBNAIL_RESOLUTION
         url = "/detail/mc" + comic.id
 
-        if (comic.episodeList.any { episode -> episode.payMode == 1 && episode.payGold > 0 }) {
+        if (comic.hasPaidChapters && !signedIn) {
             description += "\n\n$hasPaidChaptersWarning"
         }
     }
@@ -333,50 +363,56 @@ abstract class Bilibili(
     override fun chapterListParse(response: Response): List<SChapter> {
         val result = response.parseAs<BilibiliComicDto>()
 
-        if (result.code != 0)
+        if (result.code != 0) {
             return emptyList()
+        }
 
         return result.data!!.episodeList
             .filter { episode -> episode.payMode == 0 && episode.payGold == 0 }
             .map { ep -> chapterFromObject(ep, result.data.id) }
     }
 
-    private fun chapterFromObject(episode: BilibiliEpisodeDto, comicId: Int): SChapter = SChapter.create().apply {
-        name = episodePrefix + episode.shortTitle + " - " + episode.title
+    protected fun chapterFromObject(episode: BilibiliEpisodeDto, comicId: Int): SChapter = SChapter.create().apply {
+        name = episodePrefix + episode.shortTitle +
+            (if (episode.title.isNotBlank()) " - " + episode.title else "")
         date_upload = episode.publicationTime.substringBefore("T").toDate()
         url = "/mc$comicId/${episode.id}"
     }
 
-    override fun pageListRequest(chapter: SChapter): Request {
-        val chapterId = chapter.url.substringAfterLast("/").toInt()
+    override fun pageListRequest(chapter: SChapter): Request =
+        imageIndexRequest(chapter.url, "")
+
+    override fun pageListParse(response: Response): List<Page> = imageIndexParse(response)
+
+    protected fun imageIndexRequest(chapterUrl: String, credential: String): Request {
+        val chapterId = chapterUrl.substringAfterLast("/").toInt()
 
         val jsonPayload = buildJsonObject {
-            put("credential", "")
+            put("credential", credential)
             put("ep_id", chapterId)
         }
         val requestBody = jsonPayload.toString().toRequestBody(JSON_MEDIA_TYPE)
 
         val newHeaders = headersBuilder()
-            .add("Content-Length", requestBody.contentLength().toString())
-            .add("Content-Type", requestBody.contentType().toString())
-            .set("Referer", baseUrl + chapter.url)
+            .set("Referer", baseUrl + chapterUrl)
             .build()
 
-        return POST(
-            "$baseUrl/$BASE_API_ENDPOINT/GetImageIndex?device=pc&platform=web",
-            headers = newHeaders,
-            body = requestBody
-        )
+        val apiUrl = "$baseUrl/$BASE_API_COMIC_ENDPOINT/GetImageIndex".toHttpUrl()
+            .newBuilder()
+            .addCommonParameters()
+            .toString()
+
+        return POST(apiUrl, newHeaders, requestBody)
     }
 
-    override fun pageListParse(response: Response): List<Page> {
+    protected fun imageIndexParse(response: Response): List<Page> {
         val result = response.parseAs<BilibiliReader>()
 
         if (result.code != 0) {
             return emptyList()
         }
 
-        val imageQuality = chapterImageResolution
+        val imageQuality = chapterImageQuality
         val imageFormat = chapterImageFormat
 
         val imageUrls = result.data!!.images.map { "${it.path}@$imageQuality.$imageFormat" }
@@ -394,27 +430,23 @@ abstract class Bilibili(
         }
         val requestBody = jsonPayload.toString().toRequestBody(JSON_MEDIA_TYPE)
 
-        val newHeaders = headersBuilder()
-            .add("Content-Length", requestBody.contentLength().toString())
-            .add("Content-Type", requestBody.contentType().toString())
-            .build()
+        val apiUrl = "$baseUrl/$BASE_API_COMIC_ENDPOINT/ImageToken".toHttpUrl()
+            .newBuilder()
+            .addCommonParameters()
+            .toString()
 
-        return POST(
-            "$baseUrl/$BASE_API_ENDPOINT/ImageToken?device=pc&platform=web",
-            headers = newHeaders,
-            body = requestBody
-        )
+        return POST(apiUrl, headers, requestBody)
     }
 
     override fun imageUrlParse(response: Response): String = ""
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
-        val resolutionPref = ListPreference(screen.context).apply {
-            key = "${RESOLUTION_PREF_KEY}_$lang"
-            title = resolutionPrefTitle
-            entries = RESOLUTION_PREF_ENTRIES
-            entryValues = RESOLUTION_PREF_ENTRY_VALUES
-            setDefaultValue(RESOLUTION_PREF_DEFAULT_VALUE)
+        val imageQualityPref = ListPreference(screen.context).apply {
+            key = "${IMAGE_QUALITY_PREF_KEY}_$lang"
+            title = imageQualityPrefTitle
+            entries = imageQualityPrefEntries
+            entryValues = IMAGE_QUALITY_PREF_ENTRY_VALUES
+            setDefaultValue(IMAGE_QUALITY_PREF_DEFAULT_VALUE)
             summary = "%s"
 
             setOnPreferenceChangeListener { _, newValue ->
@@ -423,14 +455,14 @@ abstract class Bilibili(
                 val entry = entryValues[index] as String
 
                 preferences.edit()
-                    .putString("${RESOLUTION_PREF_KEY}_$lang", entry)
+                    .putString("${IMAGE_QUALITY_PREF_KEY}_$lang", entry)
                     .commit()
             }
         }
 
         val imageFormatPref = ListPreference(screen.context).apply {
             key = "${IMAGE_FORMAT_PREF_KEY}_$lang"
-            title = imagePrefTitle
+            title = imageFormatPrefTitle
             entries = IMAGE_FORMAT_PREF_ENTRIES
             entryValues = IMAGE_FORMAT_PREF_ENTRY_VALUES
             setDefaultValue(IMAGE_FORMAT_PREF_DEFAULT_VALUE)
@@ -447,7 +479,7 @@ abstract class Bilibili(
             }
         }
 
-        screen.addPreference(resolutionPref)
+        screen.addPreference(imageQualityPref)
         screen.addPreference(imageFormatPref)
     }
 
@@ -502,7 +534,19 @@ abstract class Bilibili(
         return response
     }
 
-    private inline fun <reified T> Response.parseAs(): BilibiliResultDto<T> = use {
+    protected fun HttpUrl.Builder.addCommonParameters(): HttpUrl.Builder = let {
+        if (name == "BILIBILI COMICS") {
+            addQueryParameter("lang", apiLang)
+            addQueryParameter("sys_lang", apiLang)
+        }
+
+        addQueryParameter("device", "pc")
+        addQueryParameter("platform", "web")
+
+        return@let it
+    }
+
+    protected inline fun <reified T> Response.parseAs(): BilibiliResultDto<T> = use {
         json.decodeFromString(it.body?.string().orEmpty())
     }
 
@@ -515,11 +559,12 @@ abstract class Bilibili(
         private const val CDN_URL = "https://manga.hdslb.com"
         private const val COVER_CDN_URL = "https://i0.hdslb.com"
 
-        private const val BASE_API_ENDPOINT = "twirp/comic.v1.Comic"
+        const val BASE_API_COMIC_ENDPOINT = "twirp/comic.v1.Comic"
+        const val BASE_API_USER_ENDPOINT = "twirp/comic.v1.User"
 
         private const val ACCEPT_JSON = "application/json, text/plain, */*"
 
-        private val JSON_MEDIA_TYPE = "application/json;charset=UTF-8".toMediaType()
+        val JSON_MEDIA_TYPE = "application/json;charset=UTF-8".toMediaType()
 
         private const val POPULAR_PER_PAGE = 18
         private const val SEARCH_PER_PAGE = 9
@@ -527,10 +572,9 @@ abstract class Bilibili(
         const val PREFIX_ID_SEARCH = "id:"
         private val ID_SEARCH_PATTERN = "^id:(mc)?(\\d+)$".toRegex()
 
-        private const val RESOLUTION_PREF_KEY = "chapterImageResolution"
-        private val RESOLUTION_PREF_ENTRIES = arrayOf("Raw", "HD", "SD")
-        private val RESOLUTION_PREF_ENTRY_VALUES = arrayOf("1200w", "800w", "600w_50q")
-        private val RESOLUTION_PREF_DEFAULT_VALUE = RESOLUTION_PREF_ENTRY_VALUES[0]
+        private const val IMAGE_QUALITY_PREF_KEY = "chapterImageResolution"
+        private val IMAGE_QUALITY_PREF_ENTRY_VALUES = arrayOf("1200w", "800w", "600w_50q")
+        private val IMAGE_QUALITY_PREF_DEFAULT_VALUE = IMAGE_QUALITY_PREF_ENTRY_VALUES[0]
 
         private const val IMAGE_FORMAT_PREF_KEY = "chapterImageFormat"
         private val IMAGE_FORMAT_PREF_ENTRIES = arrayOf("JPG", "WEBP", "PNG")
