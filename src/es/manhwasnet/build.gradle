@@ -2,10 +2,10 @@ apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
 ext {
-    extName = 'Manhwa-Latino'
-    pkgNameSuffix = 'es.manhwalatino'
-    extClass = '.ManhwaLatino'
-    extVersionCode = 16
+    extName = 'Manhwas.net'
+    pkgNameSuffix = 'es.manhwasnet'
+    extClass = '.ManhwasNet'
+    extVersionCode = 1
     isNsfw = true
 }
 
