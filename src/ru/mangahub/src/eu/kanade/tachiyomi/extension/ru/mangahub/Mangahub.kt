@@ -1,7 +1,7 @@
 package eu.kanade.tachiyomi.extension.ru.mangahub
 
-import eu.kanade.tachiyomi.lib.ratelimit.RateLimitInterceptor
 import eu.kanade.tachiyomi.network.GET
+import eu.kanade.tachiyomi.network.interceptor.rateLimit
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
@@ -31,7 +31,7 @@ open class Mangahub : ParsedHttpSource() {
     override val supportsLatest = true
 
     override val client: OkHttpClient = network.client.newBuilder()
-        .addNetworkInterceptor(RateLimitInterceptor(2))
+        .rateLimit(2)
         .build()
 
     private val json: Json by injectLazy()
@@ -78,7 +78,7 @@ open class Mangahub : ParsedHttpSource() {
     override fun searchMangaNextPageSelector(): String? = popularMangaNextPageSelector()
 
     override fun chapterListRequest(manga: SManga): Request {
-        return GET(baseUrl + manga.url + "/chapters", headers)
+        return GET(baseUrl + ("/chapters/" + manga.url.removePrefix("/title/")), headers)
     }
 
     override fun mangaDetailsParse(document: Document): SManga {
