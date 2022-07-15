@@ -6,9 +6,9 @@ import eu.kanade.tachiyomi.extension.ar.gmanga.GmangaPreferences.Companion.PREF_
 import eu.kanade.tachiyomi.extension.ar.gmanga.GmangaPreferences.Companion.PREF_CHAPTER_LISTING_SHOW_POPULAR
 import eu.kanade.tachiyomi.extension.ar.gmanga.dto.TableDto
 import eu.kanade.tachiyomi.extension.ar.gmanga.dto.asChapterList
-import eu.kanade.tachiyomi.lib.ratelimit.RateLimitInterceptor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
+import eu.kanade.tachiyomi.network.interceptor.rateLimit
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
@@ -35,7 +35,7 @@ import uy.kohesive.injekt.injectLazy
 
 class Gmanga : ConfigurableSource, HttpSource() {
 
-    private val domain: String = "gmanga.me"
+    private val domain: String = "gmanga.org"
 
     override val baseUrl: String = "https://$domain"
 
@@ -49,10 +49,8 @@ class Gmanga : ConfigurableSource, HttpSource() {
 
     private val preferences = GmangaPreferences(id)
 
-    private val rateLimitInterceptor = RateLimitInterceptor(4)
-
     override val client: OkHttpClient = network.client.newBuilder()
-        .addNetworkInterceptor(rateLimitInterceptor)
+        .rateLimit(4)
         .build()
 
     override fun headersBuilder() = Headers.Builder().apply {
@@ -109,7 +107,7 @@ class Gmanga : ConfigurableSource, HttpSource() {
 
                     thumbnail_url = it.jsonObject["cover"]!!.jsonPrimitive.contentOrNull?.let { coverFileName ->
                         val thumbnail = "medium_${coverFileName.substringBeforeLast(".")}.webp"
-                        "https://media.$domain/uploads/manga/cover/${it.jsonObject["id"]!!.jsonPrimitive.content}/$thumbnail"
+                        "https://media.gmanga.me/uploads/manga/cover/${it.jsonObject["id"]!!.jsonPrimitive.content}/$thumbnail"
                     }
                 }
             },
@@ -142,7 +140,7 @@ class Gmanga : ConfigurableSource, HttpSource() {
             Page(
                 index,
                 "$url#page_$index",
-                "https://media.$domain/uploads/releases/${releaseData["storage_key"]!!.jsonPrimitive.content}/hq${if (hasWebP) "_webp" else ""}/$pageUri"
+                "https://media.gmanga.me/uploads/releases/${releaseData["storage_key"]!!.jsonPrimitive.content}/hq${if (hasWebP) "_webp" else ""}/$pageUri"
             )
         }
     }
@@ -160,7 +158,7 @@ class Gmanga : ConfigurableSource, HttpSource() {
                     url = "/mangas/${it.jsonObject["id"]!!.jsonPrimitive.content}"
                     title = it.jsonObject["title"]!!.jsonPrimitive.content
                     val thumbnail = "medium_${it.jsonObject["cover"]!!.jsonPrimitive.content.substringBeforeLast(".")}.webp"
-                    thumbnail_url = "https://media.$domain/uploads/manga/cover/${it.jsonObject["id"]!!.jsonPrimitive.content}/$thumbnail"
+                    thumbnail_url = "https://media.gmanga.me/uploads/manga/cover/${it.jsonObject["id"]!!.jsonPrimitive.content}/$thumbnail"
                 }
             },
             mangas.size == 50

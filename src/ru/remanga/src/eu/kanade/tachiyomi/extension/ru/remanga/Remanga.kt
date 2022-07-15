@@ -8,7 +8,6 @@ import MangaDetDto
 import MyLibraryDto
 import PageDto
 import PageWrapperDto
-import PublisherDto
 import SeriesWrapperDto
 import TagsDto
 import UserDto
@@ -19,7 +18,6 @@ import android.content.SharedPreferences
 import android.os.Build
 import android.widget.Toast
 import androidx.preference.ListPreference
-import eu.kanade.tachiyomi.lib.dataimage.DataImageInterceptor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.asObservable
 import eu.kanade.tachiyomi.network.asObservableSuccess
@@ -37,12 +35,13 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import okhttp3.Headers
-import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.jsoup.Jsoup
 import rx.Observable
 import uy.kohesive.injekt.Injekt
@@ -67,24 +66,23 @@ class Remanga : ConfigurableSource, HttpSource() {
 
     private val baseOrig: String = "https://api.remanga.org"
     private val baseMirr: String = "https://api.xn--80aaig9ahr.xn--c1avg" // https://реманга.орг
-    private val baseCookieUrl: HttpUrl = "https://remanga.org".toHttpUrl()
     private val domain: String? = preferences.getString(DOMAIN_PREF, baseOrig)
 
     override val baseUrl = domain.toString()
 
     override val supportsLatest = true
 
-    private val userAgentRandomizer = " ${Random.nextInt().absoluteValue}"
+    private val userAgentRandomizer = "${Random.nextInt().absoluteValue}"
 
     override fun headersBuilder(): Headers.Builder = Headers.Builder()
-        .add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:77.0) Gecko/20100101 Firefox/78.0$userAgentRandomizer")
+        .add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36 Edg/100.0.$userAgentRandomizer")
         .add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/jxl,image/webp,*/*;q=0.8")
         .add("Referer", baseUrl.replace("api.", ""))
 
     private fun authIntercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
 
-        val cookies = client.cookieJar.loadForRequest(baseCookieUrl)
+        val cookies = client.cookieJar.loadForRequest(baseUrl.replace("api.", "").toHttpUrl())
         val authCookie = cookies
             .firstOrNull { cookie -> cookie.name == USER_COOKIE_NAME }
             ?.let { cookie -> URLDecoder.decode(cookie.value, "UTF-8") }
@@ -97,10 +95,21 @@ class Remanga : ConfigurableSource, HttpSource() {
             .build()
         return chain.proceed(authRequest)
     }
-
+    private fun imageContentTypeIntercept(chain: Interceptor.Chain): Response {
+        val originalRequest = chain.request()
+        val response = chain.proceed(originalRequest)
+        val urlRequest = originalRequest.url.toString()
+        val possibleType = urlRequest.substringAfterLast("/").substringBefore("?").split(".")
+        return if (urlRequest.contains("/images/") and (possibleType.size == 2)) {
+            val realType = possibleType[1]
+            val image = response.body?.byteString()?.toResponseBody("image/$realType".toMediaType())
+            response.newBuilder().body(image).build()
+        } else
+            response
+    }
     override val client: OkHttpClient =
         network.client.newBuilder()
-            .addInterceptor(DataImageInterceptor())
+            .addInterceptor { imageContentTypeIntercept(it) }
             .addInterceptor { authIntercept(it) }
             .build()
 
@@ -112,12 +121,12 @@ class Remanga : ConfigurableSource, HttpSource() {
 
     override fun popularMangaParse(response: Response): MangasPage = searchMangaParse(response)
 
-    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/api/titles/last-chapters/?page=$page&count=$count", headers)
+    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/api/search/catalog/?ordering=-chapter_date&count=$count&page=$page", headers)
 
     override fun latestUpdatesParse(response: Response): MangasPage = searchMangaParse(response)
 
     override fun searchMangaParse(response: Response): MangasPage {
-        if (response.request.url.toString().contains("bookmarks")) {
+        if (response.request.url.toString().contains("/bookmarks/")) {
             val page = json.decodeFromString<PageWrapperDto<MyLibraryDto>>(response.body!!.string())
             val mangas = page.content.map {
                 it.title.toSManga()
@@ -130,9 +139,21 @@ class Remanga : ConfigurableSource, HttpSource() {
             if (preferences.getBoolean(isLib_PREF, false)) {
                 content = content.filter { it.bookmark_type.isNullOrEmpty() }
             }
-            val mangas = content.map {
+
+            var mangas = content.map {
                 it.toSManga()
             }
+
+            if (mangas.isEmpty() && page.props.page < page.props.total_pages && preferences.getBoolean(isLib_PREF, false))
+                mangas = listOf(
+                    SManga.create().apply {
+                        val nextPage = "Пустая страница. Всё в «Закладках»"
+                        title = nextPage
+                        url = nextPage
+                        thumbnail_url = "$baseUrl/icon.png"
+                    }
+                )
+
             return MangasPage(mangas, page.props.page < page.props.total_pages)
         }
     }
@@ -142,9 +163,11 @@ class Remanga : ConfigurableSource, HttpSource() {
             // Do not change the title name to ensure work with a multilingual catalog!
             title = if (isEng.equals("rus")) rus_name else en_name
             url = "/api/titles/$dir/"
-            thumbnail_url = if (img.high.isNotEmpty()) {
+            thumbnail_url = if (img.high?.isNotEmpty() == true) {
                 baseUrl + img.high
-            } else baseUrl + img.mid
+            } else if (img.mid?.isNotEmpty() == true) {
+                baseUrl + img.mid
+            } else baseUrl + img.low
         }
 
     private val simpleDateFormat by lazy { SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US) }
@@ -215,11 +238,12 @@ class Remanga : ConfigurableSource, HttpSource() {
 
     private fun parseStatus(status: Int): Int {
         return when (status) {
-            0 -> SManga.COMPLETED
-            1 -> SManga.ONGOING
-            2 -> SManga.ONGOING
-            3 -> SManga.ONGOING
-            5 -> SManga.LICENSED
+            0 -> SManga.COMPLETED // Закончен
+            1 -> SManga.ONGOING // Продолжается
+            2 -> SManga.ON_HIATUS // Заморожен
+            3 -> SManga.ON_HIATUS // Нет переводчика
+            4 -> SManga.ONGOING // Анонс
+            5 -> SManga.LICENSED // Лицензировано
             else -> SManga.UNKNOWN
         }
     }
@@ -234,7 +258,7 @@ class Remanga : ConfigurableSource, HttpSource() {
         return when (age_limit) {
             2 -> "18+"
             1 -> "16+"
-            else -> "0+"
+            else -> ""
         }
     }
 
@@ -326,7 +350,7 @@ class Remanga : ConfigurableSource, HttpSource() {
                 val selectedBranch = branch.maxByOrNull { selector(it) }!!
                 return (1..(selectedBranch.count_chapters / 100 + 1)).map {
                     val response = chapterListRequest(selectedBranch.id, it)
-                    chapterListParse(response, selectedBranch.publishers)
+                    chapterListParse(response)
                 }.let { Observable.just(it.flatten()) }
             }
         }
@@ -355,8 +379,7 @@ class Remanga : ConfigurableSource, HttpSource() {
         return chapterName
     }
 
-    override fun chapterListParse(response: Response): List<SChapter> = throw NotImplementedError("Unused")
-    private fun chapterListParse(response: Response, publishers: List<PublisherDto>): List<SChapter> {
+    override fun chapterListParse(response: Response): List<SChapter> {
         var chapters = json.decodeFromString<SeriesWrapperDto<List<BookDto>>>(response.body!!.string()).content
         if (!preferences.getBoolean(PAID_PREF, false)) {
             chapters = chapters.filter { !it.is_paid or (it.is_bought == true) }
@@ -367,8 +390,8 @@ class Remanga : ConfigurableSource, HttpSource() {
                 name = chapterName(chapter)
                 url = "/api/titles/chapters/${chapter.id}"
                 date_upload = parseDate(chapter.upload_date)
-                scanlator = if (publishers.isNotEmpty()) {
-                    publishers.joinToString { it.name }
+                scanlator = if (chapter.publishers.isNotEmpty()) {
+                    chapter.publishers.joinToString { it.name }
                 } else null
             }
         }
