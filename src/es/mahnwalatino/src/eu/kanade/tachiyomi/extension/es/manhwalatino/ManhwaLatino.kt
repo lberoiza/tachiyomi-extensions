@@ -17,7 +17,6 @@ import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import rx.Observable
-import java.util.concurrent.TimeUnit
 
 class ManhwaLatino : ParsedHttpSource() {
 
@@ -40,10 +39,7 @@ class ManhwaLatino : ParsedHttpSource() {
     /**
      * Http Client with Cloudflare
      */
-    override val client: OkHttpClient = network.cloudflareClient.newBuilder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .build()
+    override val client: OkHttpClient = network.client.newBuilder().build()
 
     /**
      * Parser for The WebSite
