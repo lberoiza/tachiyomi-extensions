@@ -82,6 +82,8 @@ Some alternative steps can be followed to ignore "repo" branch and skip unrelate
     # allow a multisrc theme
     /multisrc/src/main/java/eu/kanade/tachiyomi/multisrc/<source>
     /multisrc/overrides/<source>
+    # or type the source name directly
+    <source>
     ```
 4. Configure remotes.
     ```bash
@@ -191,7 +193,7 @@ apply from: "$rootDir/common.gradle"
 | `libVersion` | (Optional, defaults to `1.3`) The version of the [extensions library](https://github.com/tachiyomiorg/extensions-lib) used. |
 | `isNsfw` | (Optional, defaults to `false`) Flag to indicate that a source contains NSFW content. |
 
-The extension's version name is generated automatically by concatenating `libVersion` and `extVersionCode`. With the example used above, the version would be `1.2.1`.
+The extension's version name is generated automatically by concatenating `libVersion` and `extVersionCode`. With the example used above, the version would be `1.3.1`.
 
 ### Core dependencies
 
@@ -254,7 +256,7 @@ The class which is referenced and defined by `extClass` in `build.gradle`. This 
 a.k.a. the Browse source entry point in the app (invoked by tapping on the source name).
 
 - The app calls `fetchPopularManga` which should return a `MangasPage` containing the first batch of found `SManga` entries.
-    - This method supports pagination. When user scrolls the manga list and more results must be fetched, the app calls it again with increasing `page` values (starting with `page=1`). This continues until `MangasPage.hasNextPage` is passed as `true` and `MangasPage.mangas` is not empty.
+    - This method supports pagination. When user scrolls the manga list and more results must be fetched, the app calls it again with increasing `page` values (starting with `page=1`). This continues while `MangasPage.hasNextPage` is passed as `true` and `MangasPage.mangas` is not empty.
 - To show the list properly, the app needs `url`, `title` and `thumbnail_url`. You **must** set them here. The rest of the fields could be filled later (refer to Manga Details below).
     - You should set `thumbnail_url` if is available, if not, `fetchMangaDetails` will be **immediately** called (this will increase network calls heavily and should be avoided).
 
@@ -304,7 +306,7 @@ open class UriPartFilter(displayName: String, private val vals: Array<Pair<Strin
 - `fetchMangaDetails` is called to update a manga's details from when it was initialized earlier.
     - `SManga.initialized` tells the app if it should call `fetchMangaDetails`. If you are overriding `fetchMangaDetails`, make sure to pass it as `true`.
     - `SManga.genre` is a string containing list of all genres separated with `", "`.
-    - `SManga.status` is an "enum" value. Refer to [the values in the `SManga` companion object](https://github.com/tachiyomiorg/extensions-lib/blob/9733fcf8d7708ce1ef24b6c242c47d67ac60b045/library/src/main/java/eu/kanade/tachiyomi/source/model/SManga.kt#L24-L27).
+    - `SManga.status` is an "enum" value. Refer to [the values in the `SManga` companion object](https://github.com/tachiyomiorg/extensions-lib/blob/master/library/src/main/java/eu/kanade/tachiyomi/source/model/SManga.kt#L24).
     - During a backup, only `url` and `title` are stored. To restore the rest of the manga data, the app calls `fetchMangaDetails`, so all fields should be (re)filled in if possible.
     - If a `SManga` is cached, `fetchMangaDetails` will be only called when the user does a manual update (Swipe-to-Refresh).
 - `fetchChapterList` is called to display the chapter list.
@@ -329,7 +331,7 @@ open class UriPartFilter(displayName: String, private val vals: Array<Pair<Strin
           }
       }
       ```
-      
+
       Make sure you make the `SimpleDateFormat` a class constant or variable so it doesn't get recreated for every chapter. If you need to parse or format dates in manga description, create another instance since `SimpleDateFormat` is not thread-safe.
     - If the parsing have any problem, make sure to return `0L` so the app will use the default date instead.
     - The app will overwrite dates of existing old chapters **UNLESS** `0L` is returned.
@@ -359,6 +361,12 @@ open class UriPartFilter(displayName: String, private val vals: Array<Pair<Strin
 
 Extensions can define URL intent filters by defining it inside a custom `AndroidManifest.xml` file.
 For an example, refer to [the NHentai module's `AndroidManifest.xml` file](https://github.com/tachiyomiorg/tachiyomi-extensions/blob/master/src/all/nhentai/AndroidManifest.xml) and [its corresponding `NHUrlActivity` handler](https://github.com/tachiyomiorg/tachiyomi-extensions/blob/master/src/all/nhentai/src/eu/kanade/tachiyomi/extension/all/nhentai/NHUrlActivity.kt).
+
+To test if the URL intent filter is working as expected, you can try opening the website in a browser and navigating to the endpoint that was added as a filter or clicking a hyperlink. Alternatively, you can use the `adb` command below.
+
+```console
+$ adb shell am start -d "<your-link>" -a android.intent.action.VIEW
+```
 
 #### Renaming existing sources
 
@@ -496,6 +504,9 @@ with open(f"{package}/src/{source}.kt", "w") as f:
     - For each time a source changes in a way that should the version increase, `overrideVersionCode` should be increased by one.
     - When a theme's default implementation changes, `baseVersionCode` should be increased, the initial value should be `1`.
     - For example, for a new theme with a new source, extention version code will be `0 + 0 + 1 = 1`.
+- `IntelijConfigurationGeneratorMainKt` should be run on creating or removing a multisrc theme.
+    - On removing a theme, you can manually remove the corresponding configuration in the `.run` folder instead.
+    - Be careful if you're using sparse checkout. If other configurations are accidentally removed, `git add` the file you want and `git restore` the others. Another choice is to allow `/multisrc/src/main/java/eu/kanade/tachiyomi/multisrc/*` before running the generator.
 
 ## Running
 
@@ -546,7 +557,7 @@ Inspecting the Logcat allows you to get a good look at the call flow and it's mo
 If you want to take a deeper look into the network flow, such as taking a look into the request and response bodies, you can use an external tool like `mitm-proxy`.
 
 #### Setup your proxy server
-We are going to use [mitm-proxy](https://mitmproxy.org/) but you can replace it with any other Web Debugger (i.e. Charles, burp, Fiddler etc). To install and execute, follow the commands bellow.
+We are going to use [mitm-proxy](https://mitmproxy.org/) but you can replace it with any other Web Debugger (i.e. Charles, Burp Suite, Fiddler etc). To install and execute, follow the commands bellow.
 
 ```console
 Install the tool.
@@ -571,14 +582,28 @@ Since most of the manga sources are going to use HTTPS, we need to disable SSL v
 
 
 ```kotlin
-class MangaSource : MadTheme(
+package eu.kanade.tachiyomi.extension.en.mangasource
+import eu.kanade.tachiyomi.multisrc.mangatheme.mangasource
+
+import android.annotation.SuppressLint
+import okhttp3.OkHttpClient
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
+
+class MangaSource : MangaTheme(
     "MangaSource",
     "https://example.com",
     "en"
 ) {
     private fun OkHttpClient.Builder.ignoreAllSSLErrors(): OkHttpClient.Builder {
-        val naiveTrustManager = object : X509TrustManager {
-            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+        val naiveTrustManager = @SuppressLint("CustomX509TrustManager")
+        object : X509TrustManager {
+            override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
             override fun checkClientTrusted(certs: Array<X509Certificate>, authType: String) = Unit
             override fun checkServerTrusted(certs: Array<X509Certificate>, authType: String) = Unit
         }
@@ -589,15 +614,15 @@ class MangaSource : MadTheme(
         }.socketFactory
 
         sslSocketFactory(insecureSocketFactory, naiveTrustManager)
-        hostnameVerifier(HostnameVerifier { _, _ -> true })
+        hostnameVerifier { _, _ -> true }
         return this
     }
 
     override val client: OkHttpClient = network.cloudflareClient.newBuilder()
         .ignoreAllSSLErrors()
         .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress("10.0.2.2", 8080)))
-        ....
         .build()
+}
 ```
 
 Note: `10.0.2.2` is usually the address of your loopback interface in the android emulator. If Tachiyomi tells you that it's unable to connect to 10.0.2.2:8080 you will likely need to change it (the same if you are using hardware device).

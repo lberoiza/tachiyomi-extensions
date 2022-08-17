@@ -108,7 +108,7 @@ class Remanga : ConfigurableSource, HttpSource() {
             response
     }
     override val client: OkHttpClient =
-        network.client.newBuilder()
+        network.cloudflareClient.newBuilder()
             .addInterceptor { imageContentTypeIntercept(it) }
             .addInterceptor { authIntercept(it) }
             .build()
@@ -289,7 +289,7 @@ class Remanga : ConfigurableSource, HttpSource() {
             }
             val mediaNameLanguage = if (isEng.equals("rus")) en_name else rus_name
             this.description = mediaNameLanguage + "\n" + ratingStar + " " + ratingValue + " (голосов: " + count_rating + ")\n" + altName + Jsoup.parse(o.description).text()
-            genre = parseType(type) + ", " + parseAge(age_limit) + ", " + (genres + categories).joinToString { it.name }
+            genre = (parseType(type) + ", " + parseAge(age_limit) + ", " + (genres + categories).joinToString { it.name }).split(", ").filter { it.isNotEmpty() }.joinToString { it.trim() }
             status = parseStatus(o.status.id)
         }
     }
@@ -432,7 +432,7 @@ class Remanga : ConfigurableSource, HttpSource() {
     override fun imageUrlParse(response: Response): String = throw NotImplementedError("Unused")
 
     private fun searchMangaByIdRequest(id: String): Request {
-        return GET("$baseUrl/api/titles/$id", headers)
+        return GET("$baseUrl/api/titles/$id/", headers)
     }
 
     override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
@@ -442,7 +442,7 @@ class Remanga : ConfigurableSource, HttpSource() {
                 .asObservableSuccess()
                 .map { response ->
                     val details = mangaDetailsParse(response)
-                    details.url = "/api/titles/$realQuery"
+                    details.url = "/api/titles/$realQuery/"
                     MangasPage(listOf(details), false)
                 }
         } else {
