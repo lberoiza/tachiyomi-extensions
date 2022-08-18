@@ -37,11 +37,6 @@ class ManhwaLatino : ParsedHttpSource() {
     override fun headersBuilder() = Headers.Builder().add("Referer", "$baseUrl")
 
     /**
-     * Http Client with Cloudflare
-     */
-    override val client: OkHttpClient = network.client.newBuilder().build()
-
-    /**
      * Parser for The WebSite
      */
     private val manhwaLatinoSiteParser = ManhwaLatinoSiteParser(baseUrl, client, headers)
