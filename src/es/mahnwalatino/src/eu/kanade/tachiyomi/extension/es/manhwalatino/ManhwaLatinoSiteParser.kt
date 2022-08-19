@@ -136,7 +136,6 @@ class ManhwaLatinoSiteParser(
      * Title, Address and thumbnail_url
      */
     fun getMangaFromList(element: Element): SManga {
-        print("getMangaFromList")
         val manga = SManga.create()
         manga.url = getUrlWithoutDomain(
             element.select(MLConstants.popularGenreUrlHTMLSelector).attr("abs:href")
