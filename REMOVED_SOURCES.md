@@ -28,7 +28,6 @@
 - JuinJutsuReader https://github.com/tachiyomiorg/tachiyomi-extensions/issues/2958
 - KomikTap.in https://github.com/tachiyomiorg/tachiyomi-extensions/issues/6133
 - Gourmet Scans https://github.com/tachiyomiorg/tachiyomi-extensions/issues/6192
-- voidscans https://github.com/tachiyomiorg/tachiyomi-extensions/issues/6418
 - Hikari Scans https://github.com/tachiyomiorg/tachiyomi-extensions/issues/6611
 - Mangawow https://github.com/tachiyomiorg/tachiyomi-extensions/issues/5367
 - Mangagecesi https://github.com/tachiyomiorg/tachiyomi-extensions/issues/5367
@@ -49,3 +48,5 @@
 - Astra Scans https://github.com/tachiyomiorg/tachiyomi-extensions/issues/13845
 - Manganoon https://github.com/tachiyomiorg/tachiyomi-extensions/issues/13866
 - MangaPro https://github.com/tachiyomiorg/tachiyomi-extensions/issues/13989
+- Coven Scan https://github.com/tachiyomiorg/tachiyomi-extensions/issues/14499
+

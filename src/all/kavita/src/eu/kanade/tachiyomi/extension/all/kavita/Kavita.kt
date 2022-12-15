@@ -491,9 +491,8 @@ class Kavita(private val suffix: String = "") : ConfigurableSource, UnmeteredSou
      * Fetches the "url" of each page from the chapter
      * **/
     override fun pageListRequest(chapter: SChapter): Request {
-        return GET("${chapter.url}/Reader/chapter-info")
+        return GET("$apiUrl/${chapter.url}", headersBuilder().build())
     }
-
     override fun fetchPageList(chapter: SChapter): Observable<List<Page>> {
         val chapterId = chapter.url
         val numPages = chapter.scanlator?.replace(" pages", "")?.toInt()
@@ -503,7 +502,7 @@ class Kavita(private val suffix: String = "") : ConfigurableSource, UnmeteredSou
             pages.add(
                 Page(
                     index = i,
-                    imageUrl = "$apiUrl/Reader/image?chapterId=$chapterId&page=$i"
+                    imageUrl = "$apiUrl/Reader/image?chapterId=$chapterId&page=$i&extractPdf=true"
                 )
             )
         }
@@ -709,6 +708,7 @@ class Kavita(private val suffix: String = "") : ConfigurableSource, UnmeteredSou
                         listOf(
                             "Image",
                             "Archive",
+                            "Pdf",
                             "Unknown",
                         ).map { FormatFilter(it) }
                     )
@@ -850,7 +850,10 @@ class Kavita(private val suffix: String = "") : ConfigurableSource, UnmeteredSou
     }
 
     override fun headersBuilder(): Headers.Builder {
-        if (jwtToken.isEmpty()) throw LoginErrorException("401 Error\nOPDS address got modified or is incorrect")
+        if (jwtToken.isEmpty()) {
+            doLogin()
+            if (jwtToken.isEmpty()) throw LoginErrorException("Error: jwt token is empty.\nTry opening the extension first")
+        }
         return Headers.Builder()
             .add("User-Agent", "Tachiyomi Kavita v${AppInfo.getVersionName()}")
             .add("Content-Type", "application/json")
