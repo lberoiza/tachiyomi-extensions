@@ -146,6 +146,7 @@ class Desu : HttpSource() {
                 is OrderBy -> url += "&order=" + arrayOf("popular", "updated", "name")[filter.state]
                 is TypeList -> filter.state.forEach { type -> if (type.state) types.add(type) }
                 is GenreList -> filter.state.forEach { genre -> if (genre.state) genres.add(genre) }
+                else -> {}
             }
         }
 
@@ -162,7 +163,7 @@ class Desu : HttpSource() {
     }
 
     override fun searchMangaParse(response: Response): MangasPage {
-        val res = json.parseToJsonElement(response.body!!.string()).jsonObject
+        val res = json.parseToJsonElement(response.body.string()).jsonObject
         val obj = res["response"]!!.jsonArray
         val nav = res["pageNavParams"]!!.jsonObject
         val count = nav["count"]!!.jsonPrimitive.int
@@ -189,7 +190,7 @@ class Desu : HttpSource() {
         return GET(baseUrl + "/manga" + manga.url, headers)
     }
     override fun mangaDetailsParse(response: Response) = SManga.create().apply {
-        val obj = json.parseToJsonElement(response.body!!.string())
+        val obj = json.parseToJsonElement(response.body.string())
             .jsonObject["response"]!!
             .jsonObject
 
@@ -197,7 +198,7 @@ class Desu : HttpSource() {
     }
 
     override fun chapterListParse(response: Response): List<SChapter> {
-        val obj = json.parseToJsonElement(response.body!!.string())
+        val obj = json.parseToJsonElement(response.body.string())
             .jsonObject["response"]!!
             .jsonObject
 
@@ -227,7 +228,7 @@ class Desu : HttpSource() {
     }
 
     override fun pageListParse(response: Response): List<Page> {
-        val obj = json.parseToJsonElement(response.body!!.string())
+        val obj = json.parseToJsonElement(response.body.string())
             .jsonObject["response"]!!
             .jsonObject
 
@@ -265,7 +266,7 @@ class Desu : HttpSource() {
 
     private class OrderBy : Filter.Select<String>(
         "Сортировка",
-        arrayOf("Популярность", "Дата", "Имя")
+        arrayOf("Популярность", "Дата", "Имя"),
     )
 
     private class GenreList(genres: List<Genre>) : Filter.Group<Genre>("Жанр", genres)
@@ -279,7 +280,7 @@ class Desu : HttpSource() {
     override fun getFilterList() = FilterList(
         OrderBy(),
         TypeList(getTypeList()),
-        GenreList(getGenreList())
+        GenreList(getGenreList()),
     )
 
     private fun getTypeList() = listOf(
@@ -287,7 +288,7 @@ class Desu : HttpSource() {
         Type("Манхва", "manhwa"),
         Type("Маньхуа", "manhua"),
         Type("Ваншот", "one_shot"),
-        Type("Комикс", "comics")
+        Type("Комикс", "comics"),
     )
 
     private fun getGenreList() = listOf(
@@ -335,7 +336,7 @@ class Desu : HttpSource() {
         Genre("Экшен", "Action"),
         Genre("Этти", "Ecchi"),
         Genre("Юри", "Yuri"),
-        Genre("Яой", "Yaoi")
+        Genre("Яой", "Yaoi"),
     )
 
     companion object {

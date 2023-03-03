@@ -30,6 +30,7 @@ import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import java.text.SimpleDateFormat
 import java.util.Locale
+import kotlin.random.Random
 
 class SixMH : HttpSource(), ConfigurableSource {
     override val name = "6漫画"
@@ -43,7 +44,11 @@ class SixMH : HttpSource(), ConfigurableSource {
     init {
         val preferences = Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
         val mirrors = MIRRORS
-        val index = preferences.getString(MIRROR_PREF, "0")!!.toInt().coerceAtMost(mirrors.size - 1)
+        var index = preferences.getString(MIRROR_PREF, "-1")!!.toInt()
+        if (index !in mirrors.indices) {
+            index = Random.nextInt(0, mirrors.size)
+            preferences.edit().putString(MIRROR_PREF, index.toString()).apply()
+        }
         val domain = mirrors[index]
 
         mirrorIndex = index
@@ -62,12 +67,12 @@ class SixMH : HttpSource(), ConfigurableSource {
     override fun popularMangaParse(response: Response): MangasPage {
         val document = response.asJsoup()
         val imgSelector = Evaluator.Tag("img")
-        val items = document.selectFirst(Evaluator.Class("cy_list_mh")).children().map {
+        val items = document.selectFirst(Evaluator.Class("cy_list_mh"))!!.children().map {
             SManga.create().apply {
                 val link = it.child(1).child(0)
                 url = link.attr("href")
                 title = link.ownText()
-                thumbnail_url = it.selectFirst(imgSelector).attr("src")
+                thumbnail_url = it.selectFirst(imgSelector)!!.attr("src")
             }
         }
         val hasNextPage = document.selectFirst(Evaluator.Class("thisclass"))?.nextElementSibling() != null
@@ -103,7 +108,7 @@ class SixMH : HttpSource(), ConfigurableSource {
     override fun mangaDetailsParse(response: Response): SManga {
         val document = response.asJsoup()
         val result = SManga.create().apply {
-            val box = document.selectFirst(Evaluator.Class("cy_info"))
+            val box = document.selectFirst(Evaluator.Class("cy_info"))!!
             val details = box.getElementsByTag("span")
             author = details[0].text().removePrefix("作者：")
             status = when (details[1].text().removePrefix("状态：").trimStart()) {
@@ -116,8 +121,8 @@ class SixMH : HttpSource(), ConfigurableSource {
                 details[3].ownText().removePrefix("标签：").split(Regex("[ -~]+"))
                     .filterTo(this) { it.isNotEmpty() }
             }.joinToString()
-            description = box.selectFirst(Evaluator.Tag("p")).ownText()
-            thumbnail_url = box.selectFirst(Evaluator.Tag("img")).run {
+            description = box.selectFirst(Evaluator.Tag("p"))!!.ownText()
+            thumbnail_url = box.selectFirst(Evaluator.Tag("img"))!!.run {
                 attr("data-src").ifEmpty { attr("src") }
             }
         }
@@ -129,7 +134,7 @@ class SixMH : HttpSource(), ConfigurableSource {
     override fun chapterListParse(response: Response): List<SChapter> {
         val document = response.asJsoup()
 
-        val list = document.selectFirst(Evaluator.Class("cy_plist"))
+        val list = document.selectFirst(Evaluator.Class("cy_plist"))!!
             .child(0).children().map {
                 val element = it.child(0)
                 SChapter.create().apply {
@@ -170,7 +175,7 @@ class SixMH : HttpSource(), ConfigurableSource {
     override fun pageListRequest(chapter: SChapter) = GET(baseUrl + chapter.url, headers)
 
     override fun pageListParse(response: Response): List<Page> {
-        val result = Unpacker.unpack(response.body!!.string(), "[", "]")
+        val result = Unpacker.unpack(response.body.string(), "[", "]")
             .ifEmpty { return emptyList() }
             .replace("\\", "")
             .removeSurrounding("\"").split("\",\"")
@@ -180,7 +185,7 @@ class SixMH : HttpSource(), ConfigurableSource {
     override fun imageUrlParse(response: Response) = throw UnsupportedOperationException("Not used.")
 
     private inline fun <reified T> Response.parseAs(): T = use {
-        json.decodeFromStream(body!!.byteStream())
+        json.decodeFromStream(body.byteStream())
     }
 
     override fun getFilterList() = FilterList(listOf(PageFilter()))

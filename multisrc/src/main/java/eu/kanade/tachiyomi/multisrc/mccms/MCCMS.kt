@@ -29,7 +29,7 @@ open class MCCMS(
     override val name: String,
     override val baseUrl: String,
     override val lang: String = "zh",
-    hasCategoryPage: Boolean = false
+    hasCategoryPage: Boolean = false,
 ) : HttpSource() {
     override val supportsLatest = true
 
@@ -131,7 +131,7 @@ open class MCCMS(
     override fun imageRequest(page: Page) = GET(page.imageUrl!!, pcHeaders)
 
     private inline fun <reified T> Response.parseAs(): T = use {
-        json.decodeFromStream<ResultDto<T>>(it.body!!.byteStream()).data
+        json.decodeFromStream<ResultDto<T>>(it.body.byteStream()).data
     }
 
     val genreData = GenreData(hasCategoryPage)

@@ -111,7 +111,7 @@ class BoyLove : HttpSource(), ConfigurableSource {
 
     private fun fetchPageList(chapterUrl: String): Observable<List<Page>> =
         client.newCall(GET(baseUrl + chapterUrl, headers)).asObservableSuccess().map { response ->
-            val root = response.asJsoup().selectFirst(Evaluator.Tag("section"))
+            val root = response.asJsoup().selectFirst(Evaluator.Tag("section"))!!
             val images = root.select(Evaluator.Class("reader-cartoon-image"))
             val urlList = if (images.isEmpty()) {
                 root.select(Evaluator.Tag("img")).map { it.attr("src").trim().toImageUrl() }
@@ -128,7 +128,7 @@ class BoyLove : HttpSource(), ConfigurableSource {
     override fun imageUrlParse(response: Response) = throw UnsupportedOperationException("Not used.")
 
     private inline fun <reified T> Response.parseAs(): T = use {
-        json.decodeFromStream<ResultDto<T>>(body!!.byteStream()).result
+        json.decodeFromStream<ResultDto<T>>(body.byteStream()).result
     }
 
     private var genres: Array<String> = emptyArray()
@@ -181,7 +181,7 @@ class BoyLove : HttpSource(), ConfigurableSource {
         private const val MIRROR_PREF = "MIRROR"
 
         // redirect URL: https://fuhouse.club/bl
-        private val MIRRORS get() = arrayOf("boylov.xyz", "boylove3.cc", "boylove.cc")
-        private val MIRRORS_DESC get() = arrayOf("boylov.xyz (大陆地区)", "boylove3.cc", "boylove.cc (非大陆地区)")
+        private val MIRRORS get() = arrayOf("boylov.xyz", "boylove3.cc", "boylove.cc", "boylove1.cc", "boylove2.cc", "boylove.today")
+        private val MIRRORS_DESC get() = arrayOf("boylov.xyz", "boylove3.cc", "boylove.cc (非大陆地区)", "boylove1.cc", "boylove2.cc", "boylove.today")
     }
 }
