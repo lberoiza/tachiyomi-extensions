@@ -11,14 +11,13 @@ import javax.crypto.spec.SecretKeySpec
 object DecryptInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
-        val host = request.url.host
         val response = chain.proceed(request)
-        val key = when {
-            "bcebos.com" in host -> key1
-            "103.107.190.121" in host -> key2
+        val key = when (request.url.topPrivateDomain()) {
+            "bcebos.com" -> key1
+            null -> key2
             else -> return response
         }
-        val data = decrypt(response.body!!.bytes(), key)
+        val data = decrypt(response.body.bytes(), key)
         val body = data.toResponseBody("image/jpeg".toMediaType())
         return response.newBuilder().body(body).build()
     }

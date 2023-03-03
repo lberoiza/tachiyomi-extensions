@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.extension.all.comickfun
 
 import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.network.asObservableSuccess
 import eu.kanade.tachiyomi.network.interceptor.rateLimit
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
@@ -17,15 +16,17 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import rx.Observable
+import java.text.ParseException
 import java.text.SimpleDateFormat
-
-const val API_BASE = "https://api.comick.fun"
+import java.util.Locale
 
 abstract class ComickFun(override val lang: String, private val comickFunLang: String) : HttpSource() {
 
-    override val name = "Comick.fun"
+    override val name = "Comick"
 
-    override val baseUrl = "https://comick.fun"
+    override val baseUrl = "https://comick.app"
+
+    private val apiUrl = "https://api.comick.fun"
 
     override val supportsLatest = true
 
@@ -45,62 +46,44 @@ abstract class ComickFun(override val lang: String, private val comickFunLang: S
 
     /** Popular Manga **/
     override fun popularMangaRequest(page: Int): Request {
-        return GET(
-            API_BASE.toHttpUrl().newBuilder().apply {
-                addPathSegment("search")
-                addQueryParameter("sort", "user_follow_count")
-                addQueryParameter("page", "$page")
-                addQueryParameter("tachiyomi", "true")
-            }.toString(),
-            headers
+        return searchMangaRequest(
+            page = page,
+            query = "",
+            filters = FilterList(
+                SortFilter("", getSortsList, defaultPopularSort),
+            ),
         )
     }
 
-    override fun popularMangaParse(response: Response): MangasPage {
-        val result = json.decodeFromString<List<Manga>>(response.body!!.string())
-        return MangasPage(
-            result.map { data ->
-                SManga.create().apply {
-                    url = "/comic/${data.slug}"
-                    title = data.title
-                    thumbnail_url = data.cover_url
-                }
-            },
-            hasNextPage = true
-        )
-    }
+    override fun popularMangaParse(response: Response) = searchMangaParse(response)
 
     /** Latest Manga **/
     override fun latestUpdatesRequest(page: Int): Request {
-        return GET(
-            API_BASE.toHttpUrl().newBuilder().apply {
-                addPathSegment("chapter")
-                if (comickFunLang != "all") addQueryParameter("lang", comickFunLang)
-                addQueryParameter("page", "$page")
-                addQueryParameter("order", "new")
-                addQueryParameter("tachiyomi", "true")
-            }.toString(),
-            headers
+        return searchMangaRequest(
+            page = page,
+            query = "",
+            filters = FilterList(
+                SortFilter("", getSortsList, defaultLatestSort),
+            ),
         )
     }
 
-    override fun latestUpdatesParse(response: Response): MangasPage {
-        val result = json.decodeFromString<List<LatestChapters>>(response.body!!.string())
-        return MangasPage(
-            result.map { data ->
-                SManga.create().apply {
-                    url = "/comic/${data.md_comics.slug}"
-                    title = data.md_comics.title
-                    thumbnail_url = data.md_comics.cover_url
-                }
-            },
-            hasNextPage = true
-        )
-    }
+    override fun latestUpdatesParse(response: Response) = searchMangaParse(response)
 
     /** Manga Search **/
+    override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
+        if (!query.startsWith(SLUG_SEARCH_PREFIX)) {
+            return super.fetchSearchManga(page, query, filters)
+        }
+
+        val slugOrHid = query.substringAfter(SLUG_SEARCH_PREFIX)
+        return fetchMangaDetails(SManga.create().apply { this.url = "/comic/$slugOrHid#" }).map {
+            MangasPage(listOf(it), false)
+        }
+    }
+
     override fun searchMangaRequest(page: Int, query: String, filters: FilterList): Request {
-        val url: String = API_BASE.toHttpUrl().newBuilder().apply {
+        val url = apiUrl.toHttpUrl().newBuilder().apply {
             addPathSegment("search")
             if (query.isEmpty()) {
                 filters.forEach { it ->
@@ -113,27 +96,31 @@ abstract class ComickFun(override val lang: String, private val comickFunLang: S
                         is GenreFilter -> {
                             it.state.filter { (it as TriState).isIncluded() }.forEach {
                                 addQueryParameter(
-                                    "genres", (it as TriState).value
+                                    "genres",
+                                    (it as TriState).value,
                                 )
                             }
 
                             it.state.filter { (it as TriState).isExcluded() }.forEach {
                                 addQueryParameter(
-                                    "excludes", (it as TriState).value
+                                    "excludes",
+                                    (it as TriState).value,
                                 )
                             }
                         }
                         is DemographicFilter -> {
                             it.state.filter { (it as CheckBox).state }.forEach {
                                 addQueryParameter(
-                                    "demographic", (it as CheckBox).value
+                                    "demographic",
+                                    (it as CheckBox).value,
                                 )
                             }
                         }
                         is TypeFilter -> {
                             it.state.filter { (it as CheckBox).state }.forEach {
                                 addQueryParameter(
-                                    "country", (it as CheckBox).value
+                                    "country",
+                                    (it as CheckBox).value,
                                 )
                             }
                         }
@@ -175,45 +162,41 @@ abstract class ComickFun(override val lang: String, private val comickFunLang: S
             }
             addQueryParameter("tachiyomi", "true")
             addQueryParameter("page", "$page")
-        }.toString()
+        }.build()
         return GET(url, headers)
     }
 
     override fun searchMangaParse(response: Response): MangasPage {
-        val result = json.decodeFromString<List<Manga>>(response.body!!.string())
+        val result = json.decodeFromString<List<Manga>>(response.body.string())
         return MangasPage(
             result.map { data ->
                 SManga.create().apply {
-                    url = "/comic/${data.slug}"
+                    // appennding # at end as part of migration from slug to hid
+                    url = "/comic/${data.hid}#"
                     title = data.title
                     thumbnail_url = data.cover_url
                 }
             },
-            hasNextPage = result.size >= 50
+            hasNextPage = result.size >= 30,
         )
     }
 
     /** Manga Details **/
-    override fun fetchMangaDetails(manga: SManga): Observable<SManga> {
-        return client.newCall(
-            GET(
-                "$API_BASE${manga.url}".toHttpUrl().newBuilder().apply {
-                    addQueryParameter("tachiyomi", "true")
-                }.toString(),
-                headers
-            )
-        ).asObservableSuccess()
-            .map { response -> mangaDetailsParse(response).apply { initialized = true } }
-    }
-
     override fun mangaDetailsRequest(manga: SManga): Request {
-        return GET("$baseUrl${manga.url}".toHttpUrl().toString())
+        // Migration from slug based urls to hid based ones
+        if (!manga.url.endsWith("#")) {
+            throw Exception("Migrate from Comick to Comick")
+        }
+
+        val mangaUrl = manga.url.removeSuffix("#")
+        return GET("$apiUrl$mangaUrl?tachiyomi=true", headers)
     }
 
     override fun mangaDetailsParse(response: Response): SManga {
-        val mangaData = json.decodeFromString<MangaDetails>(response.body!!.string())
+        val mangaData = json.decodeFromString<MangaDetails>(response.body.string())
         return SManga.create().apply {
-            url = "$baseUrl/comic/${mangaData.comic.slug}"
+            // appennding # at end as part of migration from slug to hid
+            url = "/comic/${mangaData.comic.hid}#"
             title = mangaData.comic.title
             artist = mangaData.artists.joinToString { it.name.trim() }
             author = mangaData.authors.joinToString { it.name.trim() }
@@ -224,64 +207,87 @@ abstract class ComickFun(override val lang: String, private val comickFunLang: S
         }
     }
 
+    override fun getMangaUrl(manga: SManga): String {
+        return "$baseUrl${manga.url.removeSuffix("#")}"
+    }
+
     /** Manga Chapter List **/
     override fun chapterListRequest(manga: SManga): Request {
+        // Migration from slug based urls to hid based ones
+        if (!manga.url.endsWith("#")) {
+            throw Exception("Migrate from Comick to Comick")
+        }
+
+        return paginatedChapterListRequest(manga.url.removeSuffix("#"), 1)
+    }
+
+    private fun paginatedChapterListRequest(mangaUrl: String, page: Int): Request {
         return GET(
-            "$API_BASE${manga.url}".toHttpUrl().newBuilder().apply {
+            "$apiUrl$mangaUrl".toHttpUrl().newBuilder().apply {
+                addPathSegment("chapters")
+                if (comickFunLang != "all") addQueryParameter("lang", comickFunLang)
                 addQueryParameter("tachiyomi", "true")
-            }.toString(),
-            headers
+                addQueryParameter("page", "$page")
+            }.build(),
+            headers,
         )
     }
 
     override fun chapterListParse(response: Response): List<SChapter> {
-        val mangaData = json.decodeFromString<MangaDetails>(response.body!!.string())
-        val chapterData = client.newCall(
-            GET(
-                API_BASE.toHttpUrl().newBuilder().apply {
-                    addPathSegment("comic")
-                    addPathSegments(mangaData.comic.id.toString())
-                    addPathSegments("chapter")
-                    if (comickFunLang != "all") addQueryParameter("lang", comickFunLang)
-                    addQueryParameter(
-                        "limit", mangaData.comic.chapter_count.toString()
-                    )
-                }.toString(),
-                headers
-            )
-        ).execute()
-        val result = json.decodeFromString<ChapterList>(chapterData.body!!.string())
-        return result.chapters.map { chapter ->
+        val chapterListResponse = json.decodeFromString<ChapterList>(response.body.string())
+
+        val mangaUrl = "/" + response.request.url.toString()
+            .substringBefore("/chapters")
+            .substringAfter("$apiUrl/")
+
+        var resultSize = chapterListResponse.chapters.size
+        var page = 2
+
+        while (chapterListResponse.total > resultSize) {
+            val newRequest = paginatedChapterListRequest(mangaUrl, page)
+            val newResponse = client.newCall(newRequest).execute()
+            val newChapterListResponse = json.decodeFromString<ChapterList>(newResponse.body.string())
+
+            chapterListResponse.chapters += newChapterListResponse.chapters
+
+            resultSize += newChapterListResponse.chapters.size
+            page += 1
+        }
+
+        return chapterListResponse.chapters.map { chapter ->
             SChapter.create().apply {
-                url = "/comic/${mangaData.comic.slug}/${chapter.hid}-chapter-${chapter.chap}-$comickFunLang"
+                url = "$mangaUrl/${chapter.hid}-chapter-${chapter.chap}-$comickFunLang"
                 name = beautifyChapterName(chapter.vol, chapter.chap, chapter.title)
-                date_upload = DATE_FORMATTER.parse(chapter.created_at)!!.time
+                date_upload = chapter.created_at.let {
+                    try {
+                        dateFormat.parse(it)?.time ?: 0L
+                    } catch (e: ParseException) {
+                        0L
+                    }
+                }
                 scanlator = chapter.group_name.joinToString().takeUnless { it.isBlank() }
             }
         }
     }
 
-    private val DATE_FORMATTER by lazy {
-        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZZZZ")
+    private val dateFormat by lazy {
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.ENGLISH)
+    }
+
+    override fun getChapterUrl(chapter: SChapter): String {
+        return "$baseUrl${chapter.url}"
     }
 
     /** Chapter Pages **/
     override fun pageListRequest(chapter: SChapter): Request {
         val chapterHid = chapter.url.substringAfterLast("/").substringBefore("-")
-        return GET(
-            API_BASE.toHttpUrl().newBuilder().apply {
-                addPathSegment("chapter")
-                addPathSegment(chapterHid)
-                addQueryParameter("tachiyomi", "true")
-            }.toString(),
-            headers
-        )
+        return GET("$apiUrl/chapter/$chapterHid?tachiyomi=true", headers)
     }
 
     override fun pageListParse(response: Response): List<Page> {
-        val result = json.decodeFromString<PageList>(response.body!!.string())
-        return result.chapter.images.mapIndexed { index, data ->
-            Page(index = index, imageUrl = data.url)
+        val result = json.decodeFromString<PageList>(response.body.string())
+        return result.chapter.images.mapIndexedNotNull { index, data ->
+            if (data.url == null) null else Page(index = index, imageUrl = data.url)
         }
     }
 
@@ -289,12 +295,14 @@ abstract class ComickFun(override val lang: String, private val comickFunLang: S
         const val SLUG_SEARCH_PREFIX = "id:"
     }
 
-    /** Don't touch this, Tachiyomi forces you to declare the following methods even I you don't use them **/
     override fun imageUrlParse(response: Response): String {
-        return ""
+        throw UnsupportedOperationException("Not used")
     }
 
+    protected open val defaultPopularSort: Int = 0
+    protected open val defaultLatestSort: Int = 4
+
     override fun getFilterList() = FilterList(
-        getFilters()
+        getFilters(),
     )
 }
